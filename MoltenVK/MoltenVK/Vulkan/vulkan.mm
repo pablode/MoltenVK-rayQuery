@@ -2620,6 +2620,26 @@ MVK_PUBLIC_VULKAN_STUB_VKRESULT(vkQueueSubmit2, VkQueue, uint32_t, const VkSubmi
 MVK_PUBLIC_VULKAN_STUB_VKRESULT(vkSetPrivateData, VkDevice, VkObjectType, uint64_t, VkPrivateDataSlot, uint64_t)
 
 #pragma mark -
+#pragma mark VK_KHR_acceleration_structure extension
+
+MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCreateAccelerationStructureKHR(
+    VkDevice                                    device,
+    const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkAccelerationStructureKHR*                 pAccelerationStructure) {
+    
+    return VK_SUCCESS;
+}
+
+MVK_PUBLIC_VULKAN_SYMBOL void vkDestroyAccelerationStructureKHR(
+    VkDevice                     device,
+    VkAccelerationStructureKHR   accelerationStructure,
+    const VkAllocationCallbacks* pAllocator) {
+    
+    return;
+}
+
+#pragma mark -
 #pragma mark VK_KHR_bind_memory2 extension
 
 MVK_PUBLIC_VULKAN_CORE_ALIAS(vkBindBufferMemory2, KHR);
