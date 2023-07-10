@@ -3640,6 +3640,20 @@ void MVKDevice::getCalibratedTimestamps(uint32_t timestampCount,
 	*pMaxDeviation = cpuEnd - cpuStart;
 }
 
+MVKBuffer* MVKDevice::getBufferAtAddress(uint64_t address)
+{
+    auto mvkBufIt = _gpuBufferAddressMap.find(address);
+    
+    if(mvkBufIt != _gpuBufferAddressMap.end())
+    {
+        return mvkBufIt->second;
+    }
+    else
+    {
+        return nullptr;
+    }
+}
+
 #pragma mark Object lifecycle
 
 uint32_t MVKDevice::getVulkanMemoryTypeIndex(MTLStorageMode mtlStorageMode) {
@@ -4132,7 +4146,9 @@ MVKBuffer* MVKDevice::addBuffer(MVKBuffer* mvkBuff) {
 	_resources.push_back(mvkBuff);
 	if (mvkIsAnyFlagEnabled(mvkBuff->getUsage(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)) {
 		_gpuAddressableBuffers.push_back(mvkBuff);
-	}
+        std::pair<uint64_t, MVKBuffer*> _bufferAddressPair = std::make_pair(mvkBuff->getMTLBufferGPUAddress(), mvkBuff);
+        _gpuBufferAddressMap.insert(_bufferAddressPair);
+    }
 	return mvkBuff;
 }
 
@@ -4143,6 +4159,8 @@ MVKBuffer* MVKDevice::removeBuffer(MVKBuffer* mvkBuff) {
 	mvkRemoveFirstOccurance(_resources, mvkBuff);
 	if (mvkIsAnyFlagEnabled(mvkBuff->getUsage(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)) {
 		mvkRemoveFirstOccurance(_gpuAddressableBuffers, mvkBuff);
+        auto bufferAddressIt = _gpuBufferAddressMap.find(mvkBuff->getMTLBufferGPUAddress());
+        _gpuBufferAddressMap.erase(bufferAddressIt);
 	}
 	return mvkBuff;
 }

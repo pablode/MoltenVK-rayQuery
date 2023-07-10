@@ -524,6 +524,9 @@ public:
 								 const VkCalibratedTimestampInfoEXT* pTimestampInfos,
 								 uint64_t* pTimestamps,
 								 uint64_t* pMaxDeviation);
+    
+    /** Returns a pointer to the buffer at the provided address*/
+    MVKBuffer* getBufferAtAddress(uint64_t address);
 
 #pragma mark Object lifecycle
 
@@ -913,6 +916,7 @@ protected:
 	MVKSmallVector<MVKSmallVector<MVKQueue*, kMVKQueueCountPerQueueFamily>, kMVKQueueFamilyCount> _queuesByQueueFamilyIndex;
 	MVKSmallVector<MVKResource*, 256> _resources;
 	MVKSmallVector<MVKBuffer*, 8> _gpuAddressableBuffers;
+    std::unordered_map<uint64_t, MVKBuffer*> _gpuBufferAddressMap;
 	MVKSmallVector<MVKPrivateDataSlot*> _privateDataSlots;
 	MVKSmallVector<bool> _privateDataSlotsAvailability;
 	MVKSmallVector<MVKSemaphoreImpl*> _awaitingSemaphores;
