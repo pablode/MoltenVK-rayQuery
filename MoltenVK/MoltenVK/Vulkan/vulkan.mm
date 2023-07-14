@@ -2704,8 +2704,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyAccelerationStructureKHR(
     const VkCopyAccelerationStructureInfoKHR*   pInfo) {
     
     MVKTraceVulkanCallStart();
-    // Currently were ignoring the copy mode
-    MVKAddCmd(CopyAccelerationStructure, commandBuffer, pInfo->src, pInfo->dst);
+    MVKAddCmd(CopyAccelerationStructure, commandBuffer, pInfo->src, pInfo->dst, pInfo->mode);
     MVKTraceVulkanCallEnd();
 }
 
@@ -2714,8 +2713,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdCopyAccelerationStructureToMemoryKHR(
     const VkCopyAccelerationStructureToMemoryInfoKHR*   pInfo) {
     
     MVKTraceVulkanCallStart();
-    // Currently were ignoring the copy mode
-    MVKAddCmd(CopyAccelerationStructureToMemory, commandBuffer, pInfo->src, pInfo->dst.deviceAddress);
+    MVKAddCmd(CopyAccelerationStructureToMemory, commandBuffer, pInfo->src, pInfo->dst.deviceAddress, pInfo->mode);
     MVKTraceVulkanCallEnd();
 }
 
