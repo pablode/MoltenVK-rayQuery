@@ -584,23 +584,32 @@ MTLMultisampleStencilResolveFilter mvkMTLMultisampleStencilResolveFilterFromVkRe
 #endif
 
 MVK_PUBLIC_SYMBOL MTLViewport mvkMTLViewportFromVkViewport(VkViewport vkViewport) {
-	MTLViewport mtlViewport;
-	mtlViewport.originX	= vkViewport.x;
-	mtlViewport.originY	= vkViewport.y;
-	mtlViewport.width	= vkViewport.width;
-	mtlViewport.height	= vkViewport.height;
-	mtlViewport.znear	= vkViewport.minDepth;
-	mtlViewport.zfar	= vkViewport.maxDepth;
-	return mtlViewport;
+	return {
+		.originX = vkViewport.x,
+		.originY = vkViewport.y,
+		.width   = vkViewport.width,
+		.height  = vkViewport.height,
+		.znear   = vkViewport.minDepth,
+		.zfar    = vkViewport.maxDepth
+	};
 }
 
 MVK_PUBLIC_SYMBOL MTLScissorRect mvkMTLScissorRectFromVkRect2D(VkRect2D vkRect) {
-	MTLScissorRect mtlScissor;
-	mtlScissor.x		= vkRect.offset.x;
-	mtlScissor.y		= vkRect.offset.y;
-	mtlScissor.width	= vkRect.extent.width;
-	mtlScissor.height	= vkRect.extent.height;
-	return mtlScissor;
+	return {
+		.x      = (NSUInteger)max(vkRect.offset.x, 0),
+		.y      = (NSUInteger)max(vkRect.offset.y, 0),
+		.width  = vkRect.extent.width,
+		.height = vkRect.extent.height
+	};
+}
+
+MVK_PUBLIC_SYMBOL VkRect2D mvkVkRect2DFromMTLScissorRect(MTLScissorRect mtlScissorRect) {
+	return {
+		.offset = { .x = (int32_t)mtlScissorRect.x, 
+					.y = (int32_t)mtlScissorRect.y },
+		.extent = { .width = (uint32_t)mtlScissorRect.width, 
+					.height = (uint32_t)mtlScissorRect.height }
+	};
 }
 
 MVK_PUBLIC_SYMBOL MTLCompareFunction mvkMTLCompareFunctionFromVkCompareOp(VkCompareOp vkOp) {
@@ -728,40 +737,50 @@ MTLTessellationPartitionMode mvkMTLTessellationPartitionModeFromSpvExecutionMode
 	}
 }
 
-MVK_PUBLIC_SYMBOL MTLRenderStages mvkMTLRenderStagesFromVkPipelineStageFlags(VkPipelineStageFlags vkStages,
+MVK_PUBLIC_SYMBOL MTLRenderStages mvkMTLRenderStagesFromVkPipelineStageFlags(VkPipelineStageFlags2 vkStages,
 																			 bool placeBarrierBefore) {
 	// Although there are many combined render/compute/host stages in Vulkan, there are only two render
 	// stages in Metal. If the Vulkan stage did not map ONLY to a specific Metal render stage, then if the
 	// barrier is to be placed before the render stages, it should come before the vertex stage, otherwise
 	// if the barrier is to be placed after the render stages, it should come after the fragment stage.
 	if (placeBarrierBefore) {
-		bool placeBeforeFragment = mvkIsOnlyAnyFlagEnabled(vkStages, (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-																		VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-																		VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
-																		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-																		VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT));
+		bool placeBeforeFragment = mvkIsOnlyAnyFlagEnabled(vkStages, (VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+																		VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+																		VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT |
+																		VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT |
+																		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT));
 		return placeBeforeFragment ? MTLRenderStageFragment : MTLRenderStageVertex;
 	} else {
-		bool placeAfterVertex = mvkIsOnlyAnyFlagEnabled(vkStages, (VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT |
-																	 VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
-																	 VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
-																	 VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-																	 VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT |
-																	 VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT));
+		bool placeAfterVertex = mvkIsOnlyAnyFlagEnabled(vkStages, (VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT |
+																	 VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT |
+																	 VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT |
+																	 VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+																	 VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT |
+																	 VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT));
 		return placeAfterVertex ? MTLRenderStageVertex : MTLRenderStageFragment;
 	}
 }
 
-MVK_PUBLIC_SYMBOL MTLBarrierScope mvkMTLBarrierScopeFromVkAccessFlags(VkAccessFlags vkAccess) {
+MVK_PUBLIC_SYMBOL MTLBarrierScope mvkMTLBarrierScopeFromVkAccessFlags(VkAccessFlags2 vkAccess) {
 	MTLBarrierScope mtlScope = MTLBarrierScope(0);
-	if ( mvkIsAnyFlagEnabled(vkAccess, VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT) ) {
+	if ( mvkIsAnyFlagEnabled(vkAccess, (VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | 
+										VK_ACCESS_2_INDEX_READ_BIT |
+										VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT | 
+										VK_ACCESS_2_UNIFORM_READ_BIT)) ) {
 		mtlScope |= MTLBarrierScopeBuffers;
 	}
-	if ( mvkIsAnyFlagEnabled(vkAccess, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT) ) {
+	if ( mvkIsAnyFlagEnabled(vkAccess, (VK_ACCESS_2_SHADER_READ_BIT | 
+										VK_ACCESS_2_SHADER_WRITE_BIT |
+										VK_ACCESS_2_MEMORY_READ_BIT | 
+										VK_ACCESS_2_MEMORY_WRITE_BIT)) ) {
 		mtlScope |= MTLBarrierScopeBuffers | MTLBarrierScopeTextures;
 	}
 #if MVK_MACOS
-	if ( mvkIsAnyFlagEnabled(vkAccess, VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT) ) {
+	if ( mvkIsAnyFlagEnabled(vkAccess, (VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT | 
+										VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+										VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | 
+										VK_ACCESS_2_MEMORY_READ_BIT |
+										VK_ACCESS_2_MEMORY_WRITE_BIT)) ) {
 		mtlScope |= MTLBarrierScopeRenderTargets;
 	}
 #endif
