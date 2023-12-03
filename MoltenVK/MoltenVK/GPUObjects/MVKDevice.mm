@@ -75,9 +75,6 @@ static const uint32_t kAMDRadeonRX5500DeviceId = 0x7340;
 static const uint32_t kAMDRadeonRX6800DeviceId = 0x73bf;
 static const uint32_t kAMDRadeonRX6700DeviceId = 0x73df;
 
-static const VkExtent2D kMetalSamplePositionGridSize = { 1, 1 };
-static const VkExtent2D kMetalSamplePositionGridSizeNotSupported = { 0, 0 };
-
 static const uint32_t kMaxTimeDomains = 2;
 
 #pragma clang diagnostic pop
@@ -131,9 +128,9 @@ void MVKPhysicalDevice::getFeatures(VkPhysicalDeviceFeatures2* features) {
 		.shaderInputAttachmentArrayDynamicIndexing = _metalFeatures.arrayOfTextures,
 		.shaderUniformTexelBufferArrayDynamicIndexing = _metalFeatures.arrayOfTextures,
 		.shaderStorageTexelBufferArrayDynamicIndexing = _metalFeatures.arrayOfTextures,
-		.shaderUniformBufferArrayNonUniformIndexing = false,
+		.shaderUniformBufferArrayNonUniformIndexing = true,
 		.shaderSampledImageArrayNonUniformIndexing = _metalFeatures.arrayOfTextures && _metalFeatures.arrayOfSamplers,
-		.shaderStorageBufferArrayNonUniformIndexing = false,
+		.shaderStorageBufferArrayNonUniformIndexing = true,
 		.shaderStorageImageArrayNonUniformIndexing = _metalFeatures.arrayOfTextures,
 		.shaderInputAttachmentArrayNonUniformIndexing = _metalFeatures.arrayOfTextures,
 		.shaderUniformTexelBufferArrayNonUniformIndexing = _metalFeatures.arrayOfTextures,
@@ -399,6 +396,41 @@ void MVKPhysicalDevice::getFeatures(VkPhysicalDeviceFeatures2* features) {
 				extDynState2->extendedDynamicState2PatchControlPoints = true;
 				break;
 			}
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT: {
+				auto* extDynState3 = (VkPhysicalDeviceExtendedDynamicState3FeaturesEXT*)next;
+				extDynState3->extendedDynamicState3TessellationDomainOrigin = false;
+				extDynState3->extendedDynamicState3DepthClampEnable = true;
+				extDynState3->extendedDynamicState3PolygonMode = true;
+				extDynState3->extendedDynamicState3RasterizationSamples = false;
+				extDynState3->extendedDynamicState3SampleMask = false;
+				extDynState3->extendedDynamicState3AlphaToCoverageEnable = false;
+				extDynState3->extendedDynamicState3AlphaToOneEnable = false;
+				extDynState3->extendedDynamicState3LogicOpEnable = false;
+				extDynState3->extendedDynamicState3ColorBlendEnable = false;
+				extDynState3->extendedDynamicState3ColorBlendEquation = false;
+				extDynState3->extendedDynamicState3ColorWriteMask = false;
+				extDynState3->extendedDynamicState3RasterizationStream = false;
+				extDynState3->extendedDynamicState3ConservativeRasterizationMode = false;
+				extDynState3->extendedDynamicState3ExtraPrimitiveOverestimationSize = false;
+				extDynState3->extendedDynamicState3DepthClipEnable = true;
+				extDynState3->extendedDynamicState3SampleLocationsEnable = true;
+				extDynState3->extendedDynamicState3ColorBlendAdvanced = false;
+				extDynState3->extendedDynamicState3ProvokingVertexMode = false;
+				extDynState3->extendedDynamicState3LineRasterizationMode = false;
+				extDynState3->extendedDynamicState3LineStippleEnable = false;
+				extDynState3->extendedDynamicState3DepthClipNegativeOneToOne = false;
+				extDynState3->extendedDynamicState3ViewportWScalingEnable = false;
+				extDynState3->extendedDynamicState3ViewportSwizzle = false;
+				extDynState3->extendedDynamicState3CoverageToColorEnable = false;
+				extDynState3->extendedDynamicState3CoverageToColorLocation = false;
+				extDynState3->extendedDynamicState3CoverageModulationMode = false;
+				extDynState3->extendedDynamicState3CoverageModulationTableEnable = false;
+				extDynState3->extendedDynamicState3CoverageModulationTable = false;
+				extDynState3->extendedDynamicState3CoverageReductionMode = false;
+				extDynState3->extendedDynamicState3RepresentativeFragmentTestEnable = false;
+				extDynState3->extendedDynamicState3ShadingRateImageEnable = false;
+				break;
+			}
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT: {
 				auto* interlockFeatures = (VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT*)next;
 				interlockFeatures->fragmentShaderSampleInterlock = _metalFeatures.rasterOrderGroups;
@@ -493,9 +525,7 @@ void MVKPhysicalDevice::getProperties(VkPhysicalDeviceProperties2* properties) {
 	supportedProps11.maxMultiviewViewCount = 32;
 	supportedProps11.maxMultiviewInstanceIndex = canUseInstancingForMultiview() ? uintMax / 32 : uintMax;
 	supportedProps11.protectedNoFault = false;
-	supportedProps11.maxPerSetDescriptors = 4 * (_metalFeatures.maxPerStageBufferCount +
-												 _metalFeatures.maxPerStageTextureCount +
-												 _metalFeatures.maxPerStageSamplerCount);
+	supportedProps11.maxPerSetDescriptors = getMaxPerSetDescriptorCount();
 	supportedProps11.maxMemoryAllocationSize = _metalFeatures.maxMTLBufferSize;
 
 	// Create a SSOT for these Vulkan 1.2 properties, which can be queried via two mechanisms here.
@@ -747,11 +777,11 @@ void MVKPhysicalDevice::getProperties(VkPhysicalDeviceProperties2* properties) {
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT: {
 				auto* sampLocnProps = (VkPhysicalDeviceSampleLocationsPropertiesEXT*)next;
 				sampLocnProps->sampleLocationSampleCounts = _metalFeatures.supportedSampleCounts;
-				sampLocnProps->maxSampleLocationGridSize = kMetalSamplePositionGridSize;
-				sampLocnProps->sampleLocationCoordinateRange[0] = 0.0;
-				sampLocnProps->sampleLocationCoordinateRange[1] = (15.0 / 16.0);
-				sampLocnProps->sampleLocationSubPixelBits = 4;
-				sampLocnProps->variableSampleLocations = VK_FALSE;
+				sampLocnProps->maxSampleLocationGridSize = kMVKSampleLocationPixelGridSize;
+				sampLocnProps->sampleLocationCoordinateRange[0] = kMVKMinSampleLocationCoordinate;
+				sampLocnProps->sampleLocationCoordinateRange[1] = kMVKMaxSampleLocationCoordinate;
+				sampLocnProps->sampleLocationSubPixelBits = mvkPowerOfTwoExponent(kMVKSampleLocationCoordinateGridSize);
+				sampLocnProps->variableSampleLocations = true;
 				break;
 			}
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT: {
@@ -860,8 +890,8 @@ void MVKPhysicalDevice::getMultisampleProperties(VkSampleCountFlagBits samples,
 												 VkMultisamplePropertiesEXT* pMultisampleProperties) {
 	if (pMultisampleProperties) {
 		pMultisampleProperties->maxSampleLocationGridSize = (mvkIsOnlyAnyFlagEnabled(samples, _metalFeatures.supportedSampleCounts)
-															 ? kMetalSamplePositionGridSize
-															 : kMetalSamplePositionGridSizeNotSupported);
+															 ? kMVKSampleLocationPixelGridSize
+															 : kMVKSampleLocationPixelGridSizeNotSupported);
 	}
 }
 
@@ -1596,14 +1626,15 @@ void MVKPhysicalDevice::updateTimestampPeriod() {
 		[_mtlDevice sampleTimestamps: &_prevCPUTimestamp gpuTimestamp: &_prevGPUTimestamp];
 		double elapsedCPUNanos = _prevCPUTimestamp - earlierCPUTs;
 		double elapsedGPUTicks = _prevGPUTimestamp - earlierGPUTs;
-		if (elapsedCPUNanos && elapsedGPUTicks) {		// Ensure not zero
-			float tsPeriod = elapsedCPUNanos / elapsedGPUTicks;
-			
+
+		// Don't update period the first time through, or if no time elapsed.
+		if (earlierCPUTs && elapsedCPUNanos && elapsedGPUTicks) {
 			// Basic lowpass filter TPout = (1 - A)TPout + (A * TPin).
 			// The lower A is, the slower TPout will change over time.
-			// First time through, just use the measured value directly.
-			float a = earlierCPUTs ? mvkConfig().timestampPeriodLowPassAlpha : 1.0;
-			_properties.limits.timestampPeriod = ((1.0 - a) * _properties.limits.timestampPeriod) + (a * tsPeriod);
+			auto& vkTsp = _properties.limits.timestampPeriod;
+			float a = mvkConfig().timestampPeriodLowPassAlpha;
+			float tsPeriod = elapsedCPUNanos / elapsedGPUTicks;
+			vkTsp = ((1.0 - a) * vkTsp) + (a * tsPeriod);
 		}
 	}
 }
@@ -1728,6 +1759,7 @@ void MVKPhysicalDevice::initMetalFeatures() {
 			if (!mvkOSVersionIsAtLeast(14.0, 17.0, 1.0)) {
 				_metalFeatures.needsSampleDrefLodArrayWorkaround = true;
 			}
+			_metalFeatures.needsCubeGradWorkaround = true;
 			// fallthrough
 		case kIntelVendorId:
 		case kNVVendorId:
@@ -2370,7 +2402,7 @@ void MVKPhysicalDevice::initFeatures() {
 	mvkClear(&_vulkan12FeaturesNoExt);		// Start with everything cleared
 	_vulkan12FeaturesNoExt.samplerMirrorClampToEdge = _metalFeatures.samplerMirrorClampToEdge;
 	_vulkan12FeaturesNoExt.drawIndirectCount = false;
-	_vulkan12FeaturesNoExt.descriptorIndexing = true;
+	_vulkan12FeaturesNoExt.descriptorIndexing = _metalFeatures.arrayOfTextures && _metalFeatures.arrayOfSamplers;
 	_vulkan12FeaturesNoExt.samplerFilterMinmax = false;
 	_vulkan12FeaturesNoExt.shaderOutputViewportIndex = _features.multiViewport;
 	_vulkan12FeaturesNoExt.shaderOutputLayer = _metalFeatures.layeredRendering;
@@ -2640,7 +2672,10 @@ void MVKPhysicalDevice::initLimits() {
     _properties.limits.optimalBufferCopyRowPitchAlignment = 1;
 
 	_properties.limits.timestampComputeAndGraphics = VK_TRUE;
-	_properties.limits.timestampPeriod = 1.0;	// On non-Apple GPU's, this can vary over time, and is calculated based on actual GPU activity.
+
+	// On non-Apple GPU's, this can vary over time, and is calculated based on actual GPU activity.
+	_properties.limits.timestampPeriod = 1.0;
+	updateTimestampPeriod();
 
     _properties.limits.pointSizeRange[0] = 1;
 	switch (_properties.vendorID) {
@@ -2660,7 +2695,7 @@ void MVKPhysicalDevice::initLimits() {
     _properties.limits.pointSizeGranularity = 1;
     _properties.limits.lineWidthRange[0] = 1;
     _properties.limits.lineWidthRange[1] = 1;
-    _properties.limits.lineWidthGranularity = 1;
+    _properties.limits.lineWidthGranularity = 0;
 
     _properties.limits.standardSampleLocations = VK_TRUE;
     _properties.limits.strictLines = _properties.vendorID == kIntelVendorId || _properties.vendorID == kNVVendorId;
@@ -2716,7 +2751,7 @@ void MVKPhysicalDevice::initLimits() {
     _properties.limits.maxComputeWorkGroupCount[1] = kMVKUndefinedLargeUInt32;
     _properties.limits.maxComputeWorkGroupCount[2] = kMVKUndefinedLargeUInt32;
 
-    _properties.limits.maxDrawIndexedIndexValue = numeric_limits<uint32_t>::max() - 1;	// Support both fullDrawIndexUint32 and automatic primitive restart.
+    _properties.limits.maxDrawIndexedIndexValue = numeric_limits<uint32_t>::max();
     _properties.limits.maxDrawIndirectCount = kMVKUndefinedLargeUInt32;
 
 
@@ -3114,6 +3149,13 @@ uint32_t MVKPhysicalDevice::getMaxSamplerCount() {
 	}
 }
 
+// Vulkan imposes a minimum maximum of 1024 descriptors per set.
+uint32_t MVKPhysicalDevice::getMaxPerSetDescriptorCount() {
+	return max(4 * (_metalFeatures.maxPerStageBufferCount +
+					_metalFeatures.maxPerStageTextureCount +
+					_metalFeatures.maxPerStageSamplerCount), 1024u);
+}
+
 void MVKPhysicalDevice::initExternalMemoryProperties() {
 
 	// Common
@@ -3166,6 +3208,9 @@ void MVKPhysicalDevice::initExtensions() {
 	if (!_metalFeatures.shaderBarycentricCoordinates) {
 		pWritableExtns->vk_KHR_fragment_shader_barycentric.enabled = false;
 		pWritableExtns->vk_NV_fragment_shader_barycentric.enabled = false;
+	}
+	if (!_metalFeatures.arrayOfTextures || !_metalFeatures.arrayOfSamplers) {
+		pWritableExtns->vk_EXT_descriptor_indexing.enabled = false;
 	}
     
     // The relevant functions are not available if not built with Xcode 14.
@@ -3400,12 +3445,13 @@ MVKPhysicalDevice::~MVKPhysicalDevice() {
 
 // Returns core device commands and enabled extension device commands.
 PFN_vkVoidFunction MVKDevice::getProcAddr(const char* pName) {
-	MVKEntryPoint* pMVKPA = _physicalDevice->_mvkInstance->getEntryPoint(pName);
-	uint32_t apiVersion = _physicalDevice->_mvkInstance->_appInfo.apiVersion;
+	MVKInstance* pMVKInst = _physicalDevice->_mvkInstance;
+	MVKEntryPoint* pMVKPA = pMVKInst->getEntryPoint(pName);
+	uint32_t apiVersion = pMVKInst->_appInfo.apiVersion;
 
-	bool isSupported = (pMVKPA &&											// Command exists and...
-						pMVKPA->isDevice &&									// ...is a device command and...
-						pMVKPA->isEnabled(apiVersion, _enabledExtensions));	// ...is a core or enabled extension command.
+	bool isSupported = (pMVKPA &&																			// Command exists and...
+						pMVKPA->isDevice &&																	// ...is a device command and...
+						pMVKPA->isEnabled(apiVersion, _enabledExtensions, &pMVKInst->_enabledExtensions));	// ...is a core or enabled extension command.
 
 	return isSupported ? pMVKPA->functionPointer : nullptr;
 }
@@ -3467,7 +3513,7 @@ void MVKDevice::getDescriptorSetLayoutSupport(const VkDescriptorSetLayoutCreateI
 	for (uint32_t i = 0; i < pCreateInfo->bindingCount; i++) {
 		descriptorCount += pCreateInfo->pBindings[i].descriptorCount;
 	}
-	pSupport->supported = (descriptorCount < ((_physicalDevice->_metalFeatures.maxPerStageBufferCount + _physicalDevice->_metalFeatures.maxPerStageTextureCount + _physicalDevice->_metalFeatures.maxPerStageSamplerCount) * 2));
+	pSupport->supported = (descriptorCount < _physicalDevice->getMaxPerSetDescriptorCount());
 
 	// Check whether the layout has a variable-count descriptor, and if so, whether we can support it.
 	for (auto* next = (VkBaseOutStructure*)pSupport->pNext; next; next = next->pNext) {

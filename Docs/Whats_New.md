@@ -18,9 +18,16 @@ MoltenVK 1.2.7
 
 Released TBD
 
+- Add support for extensions:
+	- `VK_EXT_extended_dynamic_state3` *(Metal does not support `VK_POLYGON_MODE_POINT`)*
+- Fix regression that broke `VK_POLYGON_MODE_LINE`.
+- Fix regression in marking rendering state dirty after `vkCmdClearAttachments()`.
 - Reduce disk space consumed after running `fetchDependencies` script by removing intermediate file caches.
+- Fix rare deadlock during launch via `dlopen()`.
+- Fix initial value of `VkPhysicalDeviceLimits::timestampPeriod` on non-Apple Silicon GPUs.
 - Update to latest SPIRV-Cross:
   - MSL: Fix regression error in argument buffer runtime arrays.
+  - MSL: Work around broken cube texture gradients on Apple Silicon.
 
 
 
