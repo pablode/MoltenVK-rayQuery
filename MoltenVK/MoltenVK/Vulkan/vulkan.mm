@@ -56,7 +56,7 @@ static inline uint64_t MVKTraceVulkanCallStartImpl(const char* funcName) {
 	bool includeExit = false;
 	bool includeDuration = false;
 
-	switch (mvkConfig().traceVulkanCalls) {
+	switch (getGlobalMVKConfig().traceVulkanCalls) {
 		case MVK_CONFIG_TRACE_VULKAN_CALLS_DURATION:
 			includeDuration = true;		// fallthrough
 		case MVK_CONFIG_TRACE_VULKAN_CALLS_ENTER_EXIT:
@@ -95,7 +95,7 @@ static inline uint64_t MVKTraceVulkanCallStartImpl(const char* funcName) {
 
 // Optionally log end of function calls and timings to stderr
 static inline void MVKTraceVulkanCallEndImpl(const char* funcName, uint64_t startTime) {
-	switch(mvkConfig().traceVulkanCalls) {
+	switch(getGlobalMVKConfig().traceVulkanCalls) {
 		case MVK_CONFIG_TRACE_VULKAN_CALLS_ENTER_EXIT:
 		case MVK_CONFIG_TRACE_VULKAN_CALLS_ENTER_EXIT_THREAD_ID:
 			fprintf(stderr, "[mvk-trace] } %s\n", funcName);
@@ -2022,7 +2022,7 @@ MVK_PUBLIC_VULKAN_SYMBOL VkResult vkEnumerateInstanceVersion(
     uint32_t*                                   pApiVersion) {
 
     MVKTraceVulkanCallStart();
-    *pApiVersion = mvkConfig().apiVersionToAdvertise;
+    *pApiVersion = getGlobalMVKConfig().apiVersionToAdvertise;
     MVKTraceVulkanCallEnd();
     return VK_SUCCESS;
 }
@@ -3974,6 +3974,26 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkSetHdrMetadataEXT(
 		mvkSwpChn->setHDRMetadataEXT(pMetadata[i]);
 	}
 	MVKTraceVulkanCallEnd();
+}
+
+
+#pragma mark -
+#pragma mark VK_EXT_headless_surface extension
+
+MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCreateHeadlessSurfaceEXT(
+    VkInstance                                  instance,
+    const VkHeadlessSurfaceCreateInfoEXT*       pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSurfaceKHR*                               pSurface) {
+
+	MVKTraceVulkanCallStart();
+	MVKInstance* mvkInst = MVKInstance::getMVKInstance(instance);
+	MVKSurface* mvkSrfc = mvkInst->createSurface(pCreateInfo, pAllocator);
+	*pSurface = (VkSurfaceKHR)mvkSrfc;
+	VkResult rslt = mvkSrfc->getConfigurationResult();
+	if (rslt < 0) { *pSurface = VK_NULL_HANDLE; mvkInst->destroySurface(mvkSrfc, pAllocator); }
+	MVKTraceVulkanCallEnd();
+	return rslt;
 }
 
 

@@ -102,6 +102,11 @@ MVKSurface* MVKInstance::createSurface(const VkMetalSurfaceCreateInfoEXT* pCreat
 	return new MVKSurface(this, pCreateInfo, pAllocator);
 }
 
+MVKSurface* MVKInstance::createSurface(const VkHeadlessSurfaceCreateInfoEXT* pCreateInfo,
+									   const VkAllocationCallbacks* pAllocator) {
+	return new MVKSurface(this, pCreateInfo, pAllocator);
+}
+
 MVKSurface* MVKInstance::createSurface(const Vk_PLATFORM_SurfaceCreateInfoMVK* pCreateInfo,
 									   const VkAllocationCallbacks* pAllocator) {
 	return new MVKSurface(this, pCreateInfo, pAllocator);
@@ -290,7 +295,7 @@ MVKInstance::MVKInstance(const VkInstanceCreateInfo* pCreateInfo) : _enabledExte
 	// This effort creates a number of autoreleased instances of Metal
 	// and other Obj-C classes, so wrap it all in an autorelease pool.
 	@autoreleasepool {
-		NSArray<id<MTLDevice>>* mtlDevices = mvkGetAvailableMTLDevicesArray();
+		NSArray<id<MTLDevice>>* mtlDevices = mvkGetAvailableMTLDevicesArray(this);
 		_physicalDevices.reserve(mtlDevices.count);
 		for (id<MTLDevice> mtlDev in mtlDevices) {
 			_physicalDevices.push_back(new MVKPhysicalDevice(this, mtlDev));
@@ -311,6 +316,7 @@ MVKInstance::MVKInstance(const VkInstanceCreateInfo* pCreateInfo) : _enabledExte
 	setConfigurationResult(pWritableExtns->enable(pCreateInfo->enabledExtensionCount,
 												  pCreateInfo->ppEnabledExtensionNames,
 												  getDriverLayer()->getSupportedInstanceExtensions()));
+	initMVKConfig(pCreateInfo);
 
 	MVKLogInfo("Created VkInstance for Vulkan version %s, as requested by app, with the following %d Vulkan extensions enabled:%s",
 			   mvkGetVulkanVersionString(_appInfo.apiVersion).c_str(),
@@ -338,6 +344,42 @@ void MVKInstance::initDebugCallbacks(const VkInstanceCreateInfo* pCreateInfo) {
 				break;
 		}
 	}
+}
+
+// If the VK_EXT_layer_settings extension is enabled, initialize the local
+// MVKConfiguration from the global version built from environment variables.
+void MVKInstance::initMVKConfig(const VkInstanceCreateInfo* pCreateInfo) {
+
+	if ( !_enabledExtensions.vk_EXT_layer_settings.enabled ) { return; }
+
+	_mvkConfig = getGlobalMVKConfig();
+
+	VkLayerSettingsCreateInfoEXT* pLSCreateInfo = nil;
+	for (const auto* next = (VkBaseInStructure*)pCreateInfo->pNext; next; next = next->pNext) {
+		switch (next->sType) {
+			case VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT:
+				pLSCreateInfo = (VkLayerSettingsCreateInfoEXT*)next;
+				break;
+			default:
+				break;
+		}
+	}
+
+	if ( !pLSCreateInfo ) { return; }
+
+	for (uint32_t lsIdx = 0; lsIdx < pLSCreateInfo->settingCount; lsIdx++) {
+		const auto* pSetting = &pLSCreateInfo->pSettings[lsIdx];
+
+#define STR(name) #name
+#define MVK_CONFIG_MEMBER(member, mbrType, name) \
+		if(mvkStringsAreEqual(pSetting->pLayerName, getDriverLayer()->getName()) &&  \
+		   mvkStringsAreEqual(pSetting->pSettingName, STR(MVK_CONFIG_##name))) {  \
+			_mvkConfig.member = *(mbrType*)(pSetting->pValues);  \
+			continue;  \
+		}
+#include "MVKConfigMembers.def"
+	}
+	mvkSetConfig(_mvkConfig, _mvkConfig, _mvkConfigStringHolders);
 }
 
 #define ADD_ENTRY_POINT_MAP(name, func, api, ext1, ext2, isDev)	\
@@ -426,6 +468,8 @@ void MVKInstance::initProcAddrs() {
 	ADD_INST_EXT_ENTRY_POINT(vkGetPhysicalDeviceSurfacePresentModesKHR, KHR_SURFACE);
 	ADD_INST_EXT_ENTRY_POINT(vkGetPhysicalDeviceSurfaceCapabilities2KHR, KHR_GET_SURFACE_CAPABILITIES_2);
 	ADD_INST_EXT_ENTRY_POINT(vkGetPhysicalDeviceSurfaceFormats2KHR, KHR_GET_SURFACE_CAPABILITIES_2);
+	ADD_INST_EXT_ENTRY_POINT(vkCreateHeadlessSurfaceEXT, EXT_HEADLESS_SURFACE);
+	ADD_INST_EXT_ENTRY_POINT(vkCreateMetalSurfaceEXT, EXT_METAL_SURFACE);
 	ADD_INST_EXT_ENTRY_POINT(vkCreateDebugReportCallbackEXT, EXT_DEBUG_REPORT);
 	ADD_INST_EXT_ENTRY_POINT(vkDestroyDebugReportCallbackEXT, EXT_DEBUG_REPORT);
 	ADD_INST_EXT_ENTRY_POINT(vkDebugReportMessageEXT, EXT_DEBUG_REPORT);
@@ -441,7 +485,6 @@ void MVKInstance::initProcAddrs() {
 	ADD_INST_EXT_ENTRY_POINT(vkCreateDebugUtilsMessengerEXT, EXT_DEBUG_UTILS);
 	ADD_INST_EXT_ENTRY_POINT(vkDestroyDebugUtilsMessengerEXT, EXT_DEBUG_UTILS);
 	ADD_INST_EXT_ENTRY_POINT(vkSubmitDebugUtilsMessageEXT, EXT_DEBUG_UTILS);
-	ADD_INST_EXT_ENTRY_POINT(vkCreateMetalSurfaceEXT, EXT_METAL_SURFACE);
 
 #ifdef VK_USE_PLATFORM_IOS_MVK
 	ADD_INST_EXT_ENTRY_POINT(vkCreateIOSSurfaceMVK, MVK_IOS_SURFACE);
@@ -452,13 +495,13 @@ void MVKInstance::initProcAddrs() {
 
 	// MoltenVK-specific instannce functions, not tied to a Vulkan API version or an extension.
 	ADD_INST_OPEN_ENTRY_POINT(vkGetMoltenVKConfigurationMVK);
-	ADD_INST_OPEN_ENTRY_POINT(vkSetMoltenVKConfigurationMVK);
 	ADD_INST_OPEN_ENTRY_POINT(vkGetPhysicalDeviceMetalFeaturesMVK);
 	ADD_INST_OPEN_ENTRY_POINT(vkGetPerformanceStatisticsMVK);
 
 	// For deprecated MoltenVK-specific functions, suppress compiler deprecation warning.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	ADD_INST_OPEN_ENTRY_POINT(vkSetMoltenVKConfigurationMVK);
 	ADD_INST_EXT_ENTRY_POINT(vkGetVersionStringsMVK, MVK_MOLTENVK);
 	ADD_INST_EXT_ENTRY_POINT(vkGetMTLDeviceMVK, MVK_MOLTENVK);
 	ADD_INST_EXT_ENTRY_POINT(vkSetMTLTextureMVK, MVK_MOLTENVK);
@@ -738,7 +781,7 @@ void MVKInstance::logVersions() {
 	MVKExtensionList allExtns(this, true);
 	MVKLogInfo("MoltenVK version %s, supporting Vulkan version %s.\n\tThe following %d Vulkan extensions are supported:%s",
 			   mvkGetMoltenVKVersionString(MVK_VERSION).c_str(),
-			   mvkGetVulkanVersionString(mvkConfig().apiVersionToAdvertise).c_str(),
+			   mvkGetVulkanVersionString(getMVKConfig().apiVersionToAdvertise).c_str(),
 			   allExtns.getEnabledCount(),
 			   allExtns.enabledNamesString("\n\t\t", true).c_str());
 }

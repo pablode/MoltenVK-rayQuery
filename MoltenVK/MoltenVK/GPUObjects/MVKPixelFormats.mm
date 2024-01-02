@@ -148,6 +148,11 @@ using namespace std;
 #       define MTLPixelFormatASTC_12x12_HDR         MTLPixelFormatInvalid
 #endif
 
+#if !MVK_XCODE_15
+#   define MTLVertexFormatFloatRG11B10              MTLVertexFormatInvalid
+#   define MTLVertexFormatFloatRGB9E5               MTLVertexFormatInvalid
+#endif
+
 
 #pragma mark -
 #pragma mark MVKPixelFormats
@@ -737,23 +742,23 @@ MTLTextureUsage MVKPixelFormats::getMTLTextureUsage(VkImageUsageFlags vkImageUsa
 		mvkEnableFlags(mtlUsage, samples == VK_SAMPLE_COUNT_1_BIT ? MTLTextureUsageShaderWrite : MTLTextureUsageShaderRead);
 	}
 
-	// Create view on, but only on color formats, or combined depth-stencil formats if supported by the GPU...
-	if ((mvkIsAnyFlagEnabled(vkImageUsageFlags, (VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) || 		// May use temp view if transfer involves format change
-		 (needsReinterpretation &&
-		  mvkIsAnyFlagEnabled(vkImageUsageFlags, (VK_IMAGE_USAGE_SAMPLED_BIT |
-												  VK_IMAGE_USAGE_STORAGE_BIT |
-												  VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
-												  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)))) &&
-		isColorFormat) {
+	bool pfv = false;
 
-		mvkEnableFlags(mtlUsage, MTLTextureUsagePixelFormatView);
-	}
-	if (mvkIsAnyFlagEnabled(vkImageUsageFlags, (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | 		// May use temp view if transfer involves format change
-		 										VK_IMAGE_USAGE_SAMPLED_BIT |
-												VK_IMAGE_USAGE_STORAGE_BIT |
-												VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) &&
-		isCombinedDepthStencilFmt && supportsStencilViews) {
+	// Swizzle emulation may need to reinterpret
+	needsReinterpretation |= !_physicalDevice->getMetalFeatures()->nativeTextureSwizzle;
 
+	pfv |= isColorFormat && needsReinterpretation &&
+	       mvkIsAnyFlagEnabled(vkImageUsageFlags, (VK_IMAGE_USAGE_SAMPLED_BIT |
+	                                               VK_IMAGE_USAGE_STORAGE_BIT |
+	                                               VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+	                                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+	pfv |= isCombinedDepthStencilFmt && supportsStencilViews &&
+	       mvkIsAnyFlagEnabled(vkImageUsageFlags, (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | // May use temp view if transfer involves format change
+	                                               VK_IMAGE_USAGE_SAMPLED_BIT |
+	                                               VK_IMAGE_USAGE_STORAGE_BIT |
+	                                               VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT));
+
+	if (pfv) {
 		mvkEnableFlags(mtlUsage, MTLTextureUsagePixelFormatView);
 	}
 
@@ -976,9 +981,9 @@ void MVKPixelFormats::initVkFormatCapabilities() {
 	addVkFormatDesc( R64G64B64A64_SINT, Invalid, Invalid, Invalid, Invalid, 1, 1, 32, ColorFloat );
 	addVkFormatDesc( R64G64B64A64_SFLOAT, Invalid, Invalid, Invalid, Invalid, 1, 1, 32, ColorFloat );
 
-	addVkFormatDesc( B10G11R11_UFLOAT_PACK32, RG11B10Float, Invalid, Invalid, Invalid, 1, 1, 4, ColorFloat );
-	addVkFormatDesc( E5B9G9R9_UFLOAT_PACK32, RGB9E5Float, Invalid, Invalid, Invalid, 1, 1, 4, ColorFloat );
-
+	addVkFormatDesc( B10G11R11_UFLOAT_PACK32, RG11B10Float, Invalid, FloatRG11B10, Invalid, 1, 1, 4, ColorFloat );
+	addVkFormatDesc( E5B9G9R9_UFLOAT_PACK32, RGB9E5Float, Invalid, FloatRGB9E5, Invalid, 1, 1, 4, ColorFloat );
+	
 	addVkFormatDesc( D32_SFLOAT, Depth32Float, Invalid, Invalid, Invalid, 1, 1, 4, DepthStencil );
 	addVkFormatDesc( D32_SFLOAT_S8_UINT, Depth32Float_Stencil8, Invalid, Invalid, Invalid, 1, 1, 5, DepthStencil );
 
@@ -1392,6 +1397,11 @@ void MVKPixelFormats::initMTLVertexFormatCapabilities() {
 	addMTLVertexFormatDesc( Half, None, None );
 
 	addMTLVertexFormatDesc( UChar4Normalized_BGRA, None, None );
+	
+#if MVK_XCODE_15
+	addMTLVertexFormatDesc( FloatRG11B10, None, None );
+	addMTLVertexFormatDesc( FloatRGB9E5, None, None );
+#endif
 
 	// When adding to this list, be sure to ensure _mtlVertexFormatCount is large enough for the format count
 }
@@ -1492,7 +1502,7 @@ void MVKPixelFormats::modifyMTLFormatCapabilities() {
 		modifyMTLFormatCapabilities(_physicalDevice->getMTLDevice());
 	} else {
 		@autoreleasepool {
-			auto* mtlDevs = mvkGetAvailableMTLDevicesArray();
+			auto* mtlDevs = mvkGetAvailableMTLDevicesArray(nullptr);
 			if (mtlDevs.count) { modifyMTLFormatCapabilities(mtlDevs[0]); }
 		}
 	}
@@ -1672,6 +1682,12 @@ void MVKPixelFormats::modifyMTLFormatCapabilities(id<MTLDevice> mtlDevice) {
 	addGPUOSMTLPixFmtCaps( Apple5, 11.0, BGR10_XR, All );
 	addGPUOSMTLPixFmtCaps( Apple5, 11.0, BGR10_XR_sRGB, All );
 #endif
+    
+#if MVK_XCODE_15
+    addGPUOSMTLPixFmtCaps( Apple9, 14.0, R32Float, All );
+    addGPUOSMTLPixFmtCaps( Apple9, 14.0, RG32Float, All );
+    addGPUOSMTLPixFmtCaps( Apple9, 14.0, RGBA32Float, All );
+#endif
 
 	addFeatSetMTLVtxFmtCaps( macOS_GPUFamily1_v3, UCharNormalized, Vertex );
 	addFeatSetMTLVtxFmtCaps( macOS_GPUFamily1_v3, CharNormalized, Vertex );
@@ -1683,6 +1699,11 @@ void MVKPixelFormats::modifyMTLFormatCapabilities(id<MTLDevice> mtlDevice) {
 	addFeatSetMTLVtxFmtCaps( macOS_GPUFamily1_v3, Short, Vertex );
 	addFeatSetMTLVtxFmtCaps( macOS_GPUFamily1_v3, Half, Vertex );
 	addFeatSetMTLVtxFmtCaps( macOS_GPUFamily1_v3, UChar4Normalized_BGRA, Vertex );
+	
+#if MVK_XCODE_15
+	addGPUOSMTLVtxFmtCaps( Apple5, 14.0, FloatRG11B10, Vertex );
+	addGPUOSMTLVtxFmtCaps( Apple5, 14.0, FloatRGB9E5, Vertex );
+#endif
 #endif
 
 #if MVK_TVOS
@@ -1776,6 +1797,11 @@ void MVKPixelFormats::modifyMTLFormatCapabilities(id<MTLDevice> mtlDevice) {
 	addFeatSetMTLVtxFmtCaps( tvOS_GPUFamily1_v3, Short, Vertex );
 	addFeatSetMTLVtxFmtCaps( tvOS_GPUFamily1_v3, Half, Vertex );
 	addFeatSetMTLVtxFmtCaps( tvOS_GPUFamily1_v3, UChar4Normalized_BGRA, Vertex );
+	
+#if MVK_XCODE_15
+	addGPUOSMTLVtxFmtCaps( Apple5, 17.0, FloatRG11B10, Vertex );
+	addGPUOSMTLVtxFmtCaps( Apple5, 17.0, FloatRGB9E5, Vertex );
+#endif
 
 	// Disable for tvOS simulator last.
 #if MVK_OS_SIMULATOR
@@ -1921,6 +1947,12 @@ void MVKPixelFormats::modifyMTLFormatCapabilities(id<MTLDevice> mtlDevice) {
 
 	addGPUOSMTLPixFmtCaps( Apple1, 13.0, Depth16Unorm, DRFM );
 	addGPUOSMTLPixFmtCaps( Apple3, 13.0, Depth16Unorm, DRFMR );
+    
+#if MVK_XCODE_15
+    addGPUOSMTLPixFmtCaps( Apple9, 14.0, R32Float, All );
+    addGPUOSMTLPixFmtCaps( Apple9, 14.0, RG32Float, All );
+    addGPUOSMTLPixFmtCaps( Apple9, 14.0, RGBA32Float, All );
+#endif
 
 	// Vertex formats
 	addFeatSetMTLVtxFmtCaps( iOS_GPUFamily1_v4, UCharNormalized, Vertex );
@@ -1933,6 +1965,11 @@ void MVKPixelFormats::modifyMTLFormatCapabilities(id<MTLDevice> mtlDevice) {
 	addFeatSetMTLVtxFmtCaps( iOS_GPUFamily1_v4, Short, Vertex );
 	addFeatSetMTLVtxFmtCaps( iOS_GPUFamily1_v4, Half, Vertex );
 	addFeatSetMTLVtxFmtCaps( iOS_GPUFamily1_v4, UChar4Normalized_BGRA, Vertex );
+	
+#if MVK_XCODE_15
+	addGPUOSMTLVtxFmtCaps( Apple5, 17.0, FloatRG11B10, Vertex );
+	addGPUOSMTLVtxFmtCaps( Apple5, 17.0, FloatRGB9E5, Vertex );
+#endif
 
 // Disable for iOS simulator last.
 #if MVK_OS_SIMULATOR
@@ -2022,7 +2059,7 @@ void MVKPixelFormats::buildVkFormatMaps() {
 #if MVK_IOS || MVK_TVOS
 					bool supportsNativeTextureSwizzle = mtlDev && mvkOSVersionIsAtLeast(13.0);
 #endif
-					if (!supportsNativeTextureSwizzle && !mvkConfig().fullImageViewSwizzle) {
+					if (!supportsNativeTextureSwizzle && !getMVKConfig().fullImageViewSwizzle) {
 						vkDesc.mtlPixelFormat = vkDesc.mtlPixelFormatSubstitute = MTLPixelFormatInvalid;
 					}
 				}
