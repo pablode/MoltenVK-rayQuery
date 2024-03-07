@@ -1,7 +1,7 @@
 /*
  * mvk_private_api.h
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ typedef unsigned long MTLArgumentBuffersTier;
  */
 
 
-#define MVK_PRIVATE_API_VERSION   39
+#define MVK_PRIVATE_API_VERSION   40
 
 
 #pragma mark -
@@ -64,11 +64,14 @@ typedef unsigned long MTLArgumentBuffersTier;
  */
 #define MVK_VERSION_MAJOR   1
 #define MVK_VERSION_MINOR   2
-#define MVK_VERSION_PATCH   7
+#define MVK_VERSION_PATCH   8
 
-#define MVK_MAKE_VERSION(major, minor, patch)    (((major) * 10000) + ((minor) * 100) + (patch))
-#define MVK_VERSION     MVK_MAKE_VERSION(MVK_VERSION_MAJOR, MVK_VERSION_MINOR, MVK_VERSION_PATCH)
+#define MVK_MAKE_VERSION(major, minor, patch)  (((major) * 10000) + ((minor) * 100) + (patch))
+#define MVK_VERSION                            MVK_MAKE_VERSION(MVK_VERSION_MAJOR, MVK_VERSION_MINOR, MVK_VERSION_PATCH)
 
+#define MVK_STRINGIFY_IMPL(val)	 #val
+#define MVK_STRINGIFY(val)       MVK_STRINGIFY_IMPL(val)
+#define MVK_VERSION_STRING       (MVK_STRINGIFY(MVK_VERSION_MAJOR) "." MVK_STRINGIFY(MVK_VERSION_MINOR) "." MVK_STRINGIFY(MVK_VERSION_PATCH))
 
 #pragma mark -
 #pragma mark MoltenVK configuration
@@ -240,6 +243,8 @@ typedef struct {
 	MVKConfigCompressionAlgorithm shaderSourceCompressionAlgorithm;            /**< MVK_CONFIG_SHADER_COMPRESSION_ALGORITHM */
 	VkBool32 shouldMaximizeConcurrentCompilation;                              /**< MVK_CONFIG_SHOULD_MAXIMIZE_CONCURRENT_COMPILATION */
 	float timestampPeriodLowPassAlpha;                                         /**< MVK_CONFIG_TIMESTAMP_PERIOD_LOWPASS_ALPHA */
+	VkBool32 useMetalPrivateAPI;                                               /**< MVK_CONFIG_USE_METAL_PRIVATE_API */
+	uint32_t _unused_struct_padding;
 } MVKConfiguration;
 
 // Legacy support for renamed struct elements.
@@ -357,6 +362,7 @@ typedef struct {
 	VkDeviceSize hostMemoryPageSize;				/**< The size of a page of host memory on this platform. */
 	VkBool32 dynamicVertexStride;					/**< If true, VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE is supported. */
 	VkBool32 needsCubeGradWorkaround;				/**< If true, sampling from cube textures with explicit gradients is broken and needs a workaround. */
+	VkBool32 nativeTextureAtomics;                  /**< If true, atomic operations on textures are supported natively. */
 } MVKPhysicalDeviceMetalFeatures;
 
 

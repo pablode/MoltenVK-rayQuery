@@ -1,7 +1,7 @@
 /*
  * MVKCmdTransfer.mm
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1599,7 +1599,8 @@ void MVKCmdClearImage<N>::encode(MVKCommandEncoder* cmdEncoder) {
             // These images cannot be rendered. Instead, use a compute shader.
             // Luckily for us, linear images only have one mip and one array layer under Metal.
             assert( !isDS );
-            id<MTLComputePipelineState> mtlClearState = cmdEncoder->getCommandEncodingPool()->getCmdClearColorImageMTLComputePipelineState(pixFmts->getFormatType(_image->getVkFormat()));
+            const bool isTextureArray = _image->getLayerCount() != 1u;
+            id<MTLComputePipelineState> mtlClearState = cmdEncoder->getCommandEncodingPool()->getCmdClearColorImageMTLComputePipelineState(pixFmts->getFormatType(_image->getVkFormat()), isTextureArray);
             id<MTLComputeCommandEncoder> mtlComputeEnc = cmdEncoder->getMTLComputeEncoder(kMVKCommandUseClearColorImage, true);
             [mtlComputeEnc pushDebugGroup: @"vkCmdClearColorImage"];
             [mtlComputeEnc setComputePipelineState: mtlClearState];

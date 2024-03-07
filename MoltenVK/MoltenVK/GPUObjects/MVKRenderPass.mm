@@ -1,7 +1,7 @@
 /*
  * MVKRenderPass.mm
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -406,7 +406,8 @@ void MVKRenderSubpass::resolveUnresolvableAttachments(MVKCommandEncoder* cmdEnco
 
 			if ( !mvkAreAllFlagsEnabled(pixFmts->getCapabilities(raImgView->getMTLPixelFormat()), kMVKMTLFmtCapsResolve) ) {
 				MVKFormatType mvkFmtType = _renderPass->getPixelFormats()->getFormatType(raImgView->getMTLPixelFormat());
-				id<MTLComputePipelineState> mtlRslvState = cmdEncoder->getCommandEncodingPool()->getCmdResolveColorImageMTLComputePipelineState(mvkFmtType);
+				const bool isTextureArray = raImgView->getImage()->getLayerCount() != 1u;
+				id<MTLComputePipelineState> mtlRslvState = cmdEncoder->getCommandEncodingPool()->getCmdResolveColorImageMTLComputePipelineState(mvkFmtType, isTextureArray);
 				id<MTLComputeCommandEncoder> mtlComputeEnc = cmdEncoder->getMTLComputeEncoder(kMVKCommandUseResolveImage);
 				[mtlComputeEnc setComputePipelineState: mtlRslvState];
 				[mtlComputeEnc setTexture: raImgView->getMTLTexture() atIndex: 0];

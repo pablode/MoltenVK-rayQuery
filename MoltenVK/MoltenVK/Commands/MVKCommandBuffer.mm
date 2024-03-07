@@ -1,7 +1,7 @@
 /*
  * MVKCommandBuffer.mm
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -709,14 +709,15 @@ void MVKCommandEncoder::finalizeDrawState(MVKGraphicsStage stage) {
         // Must happen before switching encoders.
         encodeStoreActions(true);
     }
-    _graphicsPipelineState.encode(stage);    // Must do first..it sets others
-    _graphicsResourcesState.encode(stage);   // Before push constants, to allow them to override.
+    _graphicsPipelineState.encode(stage);    	// Must do first..it sets others
 	_depthStencilState.encode(stage);
-    _renderingState.encode(stage);
+    _graphicsResourcesState.encode(stage);   	// Before push constants, to allow them to override.
     _vertexPushConstants.encode(stage);
     _tessCtlPushConstants.encode(stage);
     _tessEvalPushConstants.encode(stage);
     _fragmentPushConstants.encode(stage);
+	_gpuAddressableBuffersState.encode(stage);	// After resources and push constants
+	_renderingState.encode(stage);
     _occlusionQueryState.encode(stage);
 }
 
@@ -771,9 +772,10 @@ void MVKCommandEncoder::beginMetalComputeEncoding(MVKCommandUse cmdUse) {
 }
 
 void MVKCommandEncoder::finalizeDispatchState() {
-    _computePipelineState.encode();    // Must do first..it sets others
-    _computeResourcesState.encode();   // Before push constants, to allow them to override.
+    _computePipelineState.encode();    		// Must do first..it sets others
+    _computeResourcesState.encode();   		// Before push constants, to allow them to override.
     _computePushConstants.encode();
+	_gpuAddressableBuffersState.encode();	// After resources and push constants
 }
 
 void MVKCommandEncoder::endRendering() {
@@ -1155,6 +1157,7 @@ MVKCommandEncoder::MVKCommandEncoder(MVKCommandBuffer* cmdBuffer,
 	_graphicsResourcesState(this),
 	_computePipelineState(this),
 	_computeResourcesState(this),
+	_gpuAddressableBuffersState(this),
 	_depthStencilState(this),
 	_renderingState(this),
 	_occlusionQueryState(this),

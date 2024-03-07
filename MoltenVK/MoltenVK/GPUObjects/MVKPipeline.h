@@ -1,7 +1,7 @@
 /*
  * MVKPipeline.h
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -206,6 +206,7 @@ struct MVKTranslatedVertexBinding {
 	uint16_t binding;
 	uint16_t translationBinding;
 	uint32_t translationOffset;
+	uint32_t mappedAttributeCount;
 };
 
 /** Describes a vertex buffer binding whose divisor is zero. */
@@ -420,7 +421,7 @@ protected:
 	id<MTLComputePipelineState> _mtlTessControlStageState = nil;
 	id<MTLRenderPipelineState> _mtlPipelineState = nil;
 
-	float _blendConstants[4] = {};
+	MVKColor32 _blendConstants = { 0.0, 0.0, 0.0, 1.0 };
 	MVKShaderImplicitRezBinding _reservedVertexAttributeBufferCount;
 	MVKShaderImplicitRezBinding _viewRangeBufferIndex;
 	MVKShaderImplicitRezBinding _outputBufferIndex;

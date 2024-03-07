@@ -1,7 +1,7 @@
 /*
  * MVKDevice.h
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -361,6 +361,9 @@ public:
 	bool supportsMetalArgumentBuffers()  {
 		return _metalFeatures.argumentBuffers && getMVKConfig().useMetalArgumentBuffers != MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS_NEVER;
 	};
+
+	/** Returns whether native texture atomics are supported and should be used. */
+	bool useNativeTextureAtomics() { return _metalFeatures.nativeTextureAtomics; }
 
 
 #pragma mark Construction
@@ -932,8 +935,8 @@ protected:
 	MVKPhysicalDevice* _physicalDevice = nullptr;
     MVKCommandResourceFactory* _commandResourceFactory = nullptr;
 	MVKSmallVector<MVKSmallVector<MVKQueue*, kMVKQueueCountPerQueueFamily>, kMVKQueueFamilyCount> _queuesByQueueFamilyIndex;
-	MVKSmallVector<MVKResource*, 256> _resources;
-	MVKSmallVector<MVKBuffer*, 8> _gpuAddressableBuffers;
+	MVKSmallVector<MVKResource*> _resources;
+	MVKSmallVector<MVKBuffer*> _gpuAddressableBuffers;
     std::unordered_map<MVKBufferAddressRange, MVKBuffer*, MVKHash_uint64_t_pair> _gpuBufferAddressMap;
     std::unordered_map<uint64_t, MVKAccelerationStructure*> _gpuAccStructAddressMap;
     uint64_t _nextValidAccStructureAddress;

@@ -1,7 +1,7 @@
 /*
  * MVKCommonEnvironment.h
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,8 +69,11 @@ extern "C" {
 #ifndef TARGET_OS_XR
 #	define TARGET_OS_XR				0		// Older SDK's don't define TARGET_OS_XR
 #endif
+#ifndef TARGET_OS_VISION
+#   define TARGET_OS_VISION         0        // Older SDK's don't define TARGET_OS_VISION
+#endif
 #ifndef MVK_VISIONOS
-#	define MVK_VISIONOS				TARGET_OS_XR
+#	define MVK_VISIONOS				(TARGET_OS_XR || TARGET_OS_VISION)
 #endif
 
 /** Building for iOS or tvOS. */
@@ -83,9 +86,9 @@ extern "C" {
 #	define MVK_MACOS_OR_IOS			(MVK_MACOS || MVK_IOS)
 #endif
 
-/** Building for macOS, iOS or visionOS. */
-#ifndef MVK_MACOS_OR_IOS_OR_VISIONOS
-#	define MVK_MACOS_OR_IOS_OR_VISIONOS	(MVK_MACOS || MVK_IOS | MVK_VISIONOS)
+/** Building for iOS or visionOS. */
+#ifndef MVK_IOS_OR_VISIONOS
+#    define MVK_IOS_OR_VISIONOS    (MVK_IOS || MVK_VISIONOS)
 #endif
 
 /** Building for a Simulator. */
@@ -123,6 +126,19 @@ extern "C" {
 #ifndef MVK_XCODE_12
 #	define MVK_XCODE_12 			((__MAC_OS_X_VERSION_MAX_ALLOWED >= 110000) || \
 									 (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000))
+#endif
+
+/**
+ * Enable use of private Metal APIs.
+ *
+ * Enabling this build setting during a MoltenVK build will allow MoltenVK to
+ * extend its functionality by using certain private Metal API calls, but it 
+ * will also disqualify the app from being distributed via Apple App Stores.
+ *
+ * Disabled by default.
+ */
+#ifndef MVK_USE_METAL_PRIVATE_API
+#	define MVK_USE_METAL_PRIVATE_API		0
 #endif
 
 /** Directive to identify public symbols. */

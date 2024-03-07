@@ -1,7 +1,7 @@
 /*
  * MVKImage.mm
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -145,7 +145,7 @@ void MVKImagePlane::initSubresources(const VkImageCreateInfo* pCreateInfo) {
     subRez.layoutState = pCreateInfo->initialLayout;
 
     VkDeviceSize offset = 0;
-    if (_planeIndex > 0 && _image->_memoryBindings.size() == 1) {
+    if (_planeIndex > 0 && _image->getMemoryBindingCount() == 1) {
         if (!_image->_isLinear && !_image->_isLinearForAtomics && _image->getDevice()->_pMetalFeatures->placementHeaps) {
             // For textures allocated directly on the heap, we need to obey the size and alignment
             // requirements reported by the device.
@@ -303,7 +303,7 @@ void MVKImagePlane::propagateDebugName() {
 }
 
 MVKImageMemoryBinding* MVKImagePlane::getMemoryBinding() const {
-    return (_image->_memoryBindings.size() > 1) ? _image->_memoryBindings[_planeIndex] : _image->_memoryBindings[0];
+	return _image->getMemoryBinding(_planeIndex);
 }
 
 void MVKImagePlane::applyImageMemoryBarrier(MVKPipelineBarrier& barrier,
@@ -472,8 +472,7 @@ bool MVKImageMemoryBinding::needsHostReadSync(MVKPipelineBarrier& barrier) {
     return ((barrier.newLayout == VK_IMAGE_LAYOUT_GENERAL) &&
             mvkIsAnyFlagEnabled(barrier.dstAccessMask, (VK_ACCESS_HOST_READ_BIT | VK_ACCESS_MEMORY_READ_BIT)) &&
             isMemoryHostAccessible() && (!_device->_pMetalFeatures->sharedLinearTextures || !isMemoryHostCoherent()));
-#endif
-#if MVK_IOS_OR_TVOS
+#else
     return false;
 #endif
 }
@@ -522,12 +521,14 @@ VkResult MVKImageMemoryBinding::pullFromDevice(VkDeviceSize offset, VkDeviceSize
     return VK_SUCCESS;
 }
 
+// If I am the only memory binding, I cover all planes.
 uint8_t MVKImageMemoryBinding::beginPlaneIndex() const {
-    return (_image->_memoryBindings.size() > 1) ? _planeIndex : 0;
+    return (_image->getMemoryBindingCount() > 1) ? _planeIndex : 0;
 }
 
+// If I am the only memory binding, I cover all planes.
 uint8_t MVKImageMemoryBinding::endPlaneIndex() const {
-    return (_image->_memoryBindings.size() > 1) ? _planeIndex : (uint8_t)_image->_memoryBindings.size();
+    return (_image->getMemoryBindingCount() > 1) ? _planeIndex + 1 : (uint8_t)_image->_planes.size();
 }
 
 MVKImageMemoryBinding::MVKImageMemoryBinding(MVKDevice* device, MVKImage* image, uint8_t planeIndex) : MVKResource(device), _image(image), _planeIndex(planeIndex) {
@@ -554,7 +555,7 @@ void MVKImage::propagateDebugName() {
 }
 
 void MVKImage::flushToDevice(VkDeviceSize offset, VkDeviceSize size) {
-    for (int bindingIndex = 0; bindingIndex < _memoryBindings.size(); bindingIndex++) {
+    for (int bindingIndex = 0; bindingIndex < getMemoryBindingCount(); bindingIndex++) {
         MVKImageMemoryBinding *binding = _memoryBindings[bindingIndex];
         binding->flushToDevice(offset, size);
     }
@@ -621,6 +622,15 @@ bool MVKImage::getIsValidViewFormat(VkFormat viewFormat) {
 
 #pragma mark Resource memory
 
+// There may be less memory bindings than planes, but there will always be at least one.
+uint8_t MVKImage::getMemoryBindingIndex(uint8_t planeIndex) const {
+	return std::min<uint8_t>(planeIndex, getMemoryBindingCount() - 1);
+}
+
+MVKImageMemoryBinding* MVKImage::getMemoryBinding(uint8_t planeIndex) {
+	return _memoryBindings[getMemoryBindingIndex(planeIndex)];
+}
+
 void MVKImage::applyImageMemoryBarrier(MVKPipelineBarrier& barrier,
 									   MVKCommandEncoder* cmdEncoder,
 									   MVKCommandUse cmdUse) {
@@ -650,7 +660,7 @@ VkResult MVKImage::getMemoryRequirements(VkMemoryRequirements* pMemoryRequiremen
         mvkDisableFlags(pMemoryRequirements->memoryTypeBits, getPhysicalDevice()->getLazilyAllocatedMemoryTypes());
     }
 
-    return _memoryBindings[planeIndex]->getMemoryRequirements(pMemoryRequirements);
+    return getMemoryBinding(planeIndex)->getMemoryRequirements(pMemoryRequirements);
 }
 
 VkResult MVKImage::getMemoryRequirements(const void* pInfo, VkMemoryRequirements2* pMemoryRequirements) {
@@ -669,11 +679,11 @@ VkResult MVKImage::getMemoryRequirements(const void* pInfo, VkMemoryRequirements
 	}
     VkResult rslt = getMemoryRequirements(&pMemoryRequirements->memoryRequirements, planeIndex);
     if (rslt != VK_SUCCESS) { return rslt; }
-    return _memoryBindings[planeIndex]->getMemoryRequirements(pInfo, pMemoryRequirements);
+    return getMemoryBinding(planeIndex)->getMemoryRequirements(pInfo, pMemoryRequirements);
 }
 
 VkResult MVKImage::bindDeviceMemory(MVKDeviceMemory* mvkMem, VkDeviceSize memOffset, uint8_t planeIndex) {
-    return _memoryBindings[planeIndex]->bindDeviceMemory(mvkMem, memOffset);
+    return getMemoryBinding(planeIndex)->bindDeviceMemory(mvkMem, memOffset);
 }
 
 VkResult MVKImage::bindDeviceMemory2(const VkBindImageMemoryInfo* pBindInfo) {
@@ -850,7 +860,7 @@ MTLTextureUsage MVKImage::getMTLTextureUsage(MTLPixelFormat mtlPixFmt) {
 		needsReinterpretation = needsReinterpretation || !pixFmts->compatibleAsLinearOrSRGB(mtlPixFmt, viewFmt);
 	}
 
-	MTLTextureUsage mtlUsage = pixFmts->getMTLTextureUsage(getCombinedUsage(), mtlPixFmt, _samples, _isLinear || _isLinearForAtomics, needsReinterpretation, _hasExtendedUsage);
+	MTLTextureUsage mtlUsage = pixFmts->getMTLTextureUsage(getCombinedUsage(), mtlPixFmt, _samples, _isLinear || _isLinearForAtomics, needsReinterpretation, _hasExtendedUsage, _shouldSupportAtomics);
 
 	// Metal before 3.0 doesn't support 3D compressed textures, so we'll
 	// decompress the texture ourselves, and we need to be able to write to it.
@@ -924,14 +934,15 @@ MVKImage::MVKImage(MVKDevice* device, const VkImageCreateInfo* pCreateInfo) : MV
     // If this is a storage image of format R32_UINT or R32_SINT, or MUTABLE_FORMAT is set
     // and R32_UINT is in the set of possible view formats, then we must use a texel buffer,
     // or image atomics won't work.
-	_isLinearForAtomics = (_arrayLayers == 1 && _mipLevels == 1 && getImageType() == VK_IMAGE_TYPE_2D && mvkIsAnyFlagEnabled(getCombinedUsage(), VK_IMAGE_USAGE_STORAGE_BIT) &&
-						   ((_vkFormat == VK_FORMAT_R32_UINT || _vkFormat == VK_FORMAT_R32_SINT) ||
-							(_hasMutableFormat && pixFmts->getViewClass(_vkFormat) == MVKMTLViewClass::Color32 &&
-							 (getIsValidViewFormat(VK_FORMAT_R32_UINT) || getIsValidViewFormat(VK_FORMAT_R32_SINT)))));
+	_shouldSupportAtomics = mvkIsAnyFlagEnabled(getCombinedUsage(), VK_IMAGE_USAGE_STORAGE_BIT) && _mipLevels == 1 &&
+				((_vkFormat == VK_FORMAT_R32_UINT || _vkFormat == VK_FORMAT_R32_SINT) ||
+					(_hasMutableFormat && pixFmts->getViewClass(_vkFormat) == MVKMTLViewClass::Color32 && (getIsValidViewFormat(VK_FORMAT_R32_UINT) || getIsValidViewFormat(VK_FORMAT_R32_SINT))));
+
+	_isLinearForAtomics = _shouldSupportAtomics && !getPhysicalDevice()->useNativeTextureAtomics() && _arrayLayers == 1 && getImageType() == VK_IMAGE_TYPE_2D;
 
 	_is3DCompressed = (getImageType() == VK_IMAGE_TYPE_3D) && (pixFmts->getFormatType(pCreateInfo->format) == kMVKFormatCompressed) && !_device->_pMetalFeatures->native3DCompressedTextures;
 	_isDepthStencilAttachment = (mvkAreAllFlagsEnabled(pCreateInfo->usage, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ||
-								 mvkAreAllFlagsEnabled(pixFmts->getVkFormatProperties(pCreateInfo->format).optimalTilingFeatures, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT));
+								 mvkAreAllFlagsEnabled(pixFmts->getVkFormatProperties3(pCreateInfo->format).optimalTilingFeatures, VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT));
 	_canSupportMTLTextureView = !_isDepthStencilAttachment || _device->_pMetalFeatures->stencilViews;
 	_rowByteAlignment = _isLinear || _isLinearForAtomics ? _device->getVkFormatTexelBufferAlignment(pCreateInfo->format, this) : mvkEnsurePowerOfTwo(pixFmts->getBytesPerBlock(pCreateInfo->format));
 
@@ -1687,35 +1698,68 @@ VkResult MVKImageViewPlane::initSwizzledMTLPixelFormat(const VkImageViewCreateIn
 			break;
 	}
 
+	// Metal requires special handling when sampling depth/stencil textures in the following cases:
+	// 1. Sampling stencil from a depth/stencil format
+	// 2. Metal's undefined values for depth/stencil sample to vec4 conversion
+	if (mvkIsAnyFlagEnabled(aspectMask, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) &&
+		mvkIsAnyFlagEnabled(_imageView->_usage, (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)))
+	{
+		// 1. Sampling stencil from a depth/stencil format
+		// To sample the stencil value from a depth/stencil format, Metal requires to drop the depth for the view format.
+		// Meaning that MTLPixelFormatDepth32Float_Stencil8 needs to be MTLPixelFormatX32_Stencil8 for the view according to spec:
+		// You can't directly read the stencil value of a texture with the MTLPixelFormatDepth32Float_Stencil8 format.
+		// To read stencil values from a texture with the MTLPixelFormatDepth32Float_Stencil8 format, create a texture view
+		// of that texture using the MTLPixelFormatX32_Stencil8 format, and sample the texture view instead.
+		if (aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) {
+			if (_mtlPixFmt == MTLPixelFormatDepth32Float_Stencil8) {
+				_mtlPixFmt = MTLPixelFormatX32_Stencil8;
+			}
+#if MVK_MACOS
+			else if (_mtlPixFmt == MTLPixelFormatDepth24Unorm_Stencil8) {
+				_mtlPixFmt = MTLPixelFormatX24_Stencil8;
+			}
+#endif
+		}
+		
+		// 2. Metal's undefined values for depth/stencil sample to vec4 conversion
+		// Due to differences in Metal and Vulkan specification for sampling depth/stencil textures into vec4, we need to
+		// provide the correct mapping from Vulkan to Metal
+		// Metal states:
+		// "For a texture with depth or stencil pixel format (such as MTLPixelFormatDepth24Unorm_Stencil8 or MTLPixelFormatStencil8),
+		// the default value for an unspecified component is undefined." which means all values but R will be undefined.
+		// Vulkan requires that all components be defined, with `G` and `B` set to `0` and `A` set to `1`.
+		// See https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#textures-conversion-to-rgba.
+		if (enableSwizzling()) {
+			if (_componentSwizzle.r == VK_COMPONENT_SWIZZLE_A) {
+				_componentSwizzle.r = VK_COMPONENT_SWIZZLE_ONE;
+			} else if (_componentSwizzle.r == VK_COMPONENT_SWIZZLE_G || _componentSwizzle.r == VK_COMPONENT_SWIZZLE_B) {
+				_componentSwizzle.r = VK_COMPONENT_SWIZZLE_ZERO;
+			}
+			if (_componentSwizzle.g == VK_COMPONENT_SWIZZLE_A) {
+				_componentSwizzle.g = VK_COMPONENT_SWIZZLE_ONE;
+			} else if (_componentSwizzle.g == VK_COMPONENT_SWIZZLE_G || _componentSwizzle.g == VK_COMPONENT_SWIZZLE_B || _componentSwizzle.g == VK_COMPONENT_SWIZZLE_IDENTITY) {
+				_componentSwizzle.g = VK_COMPONENT_SWIZZLE_ZERO;
+			}
+			if (_componentSwizzle.b == VK_COMPONENT_SWIZZLE_A) {
+				_componentSwizzle.b = VK_COMPONENT_SWIZZLE_ONE;
+			} else if (_componentSwizzle.b == VK_COMPONENT_SWIZZLE_G || _componentSwizzle.b == VK_COMPONENT_SWIZZLE_B || _componentSwizzle.b == VK_COMPONENT_SWIZZLE_IDENTITY) {
+				_componentSwizzle.b = VK_COMPONENT_SWIZZLE_ZERO;
+			}
+			if (_componentSwizzle.a == VK_COMPONENT_SWIZZLE_A || _componentSwizzle.a == VK_COMPONENT_SWIZZLE_IDENTITY) {
+				_componentSwizzle.a = VK_COMPONENT_SWIZZLE_ONE;
+			} else if (_componentSwizzle.a == VK_COMPONENT_SWIZZLE_G || _componentSwizzle.a == VK_COMPONENT_SWIZZLE_B ) {
+				_componentSwizzle.a = VK_COMPONENT_SWIZZLE_ZERO;
+			}
+			
+			return VK_SUCCESS;
+		}
+	}
+
 #define SWIZZLE_MATCHES(R, G, B, A)    mvkVkComponentMappingsMatch(_componentSwizzle, {VK_COMPONENT_SWIZZLE_ ##R, VK_COMPONENT_SWIZZLE_ ##G, VK_COMPONENT_SWIZZLE_ ##B, VK_COMPONENT_SWIZZLE_ ##A} )
 #define VK_COMPONENT_SWIZZLE_ANY       VK_COMPONENT_SWIZZLE_MAX_ENUM
 
 	// If we have an identity swizzle, we're all good.
 	if (SWIZZLE_MATCHES(R, G, B, A)) {
-
-		// Identity swizzles of depth/stencil formats can require special handling.
-		if (mvkIsAnyFlagEnabled(_imageView->_usage, (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT))) {
-
-			// If only stencil aspect is requested, possibly change to stencil-only format.
-			if (aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) {
-				if (_mtlPixFmt == MTLPixelFormatDepth32Float_Stencil8) {
-					_mtlPixFmt = MTLPixelFormatX32_Stencil8;
-				}
-#if MVK_MACOS
-				else if (_mtlPixFmt == MTLPixelFormatDepth24Unorm_Stencil8) {
-					_mtlPixFmt = MTLPixelFormatX24_Stencil8;
-				}
-#endif
-			}
-
-			// When reading or sampling into a vec4 color, Vulkan expects the depth or stencil value in only the red component.
-			// Metal can be inconsistent, but on most platforms populates all components with the depth or stencil value.
-			// If swizzling is available, we can compensate for this by forcing the appropriate swizzle.
-			if (mvkIsAnyFlagEnabled(aspectMask, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) && enableSwizzling()) {
-				_componentSwizzle = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ONE };
-			}
-		}
-
 		return VK_SUCCESS;
 	}
 
@@ -1827,26 +1871,16 @@ VkResult MVKImageViewPlane::initSwizzledMTLPixelFormat(const VkImageViewCreateIn
 			}
 			break;
 
-		case MTLPixelFormatDepth32Float_Stencil8:
-			// If aspect mask looking only for stencil then change to stencil-only format even if shader swizzling is needed
-			if (aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT &&
-				mvkIsAnyFlagEnabled(_imageView->_usage, (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT))) {
-				_mtlPixFmt = MTLPixelFormatX32_Stencil8;
-				if (SWIZZLE_MATCHES(R, ANY, ANY, ANY)) {
-					return VK_SUCCESS;
-				}
+		case MTLPixelFormatX32_Stencil8:
+			if (SWIZZLE_MATCHES(R, ANY, ANY, ANY)) {
+				return VK_SUCCESS;
 			}
 			break;
 
 #if MVK_MACOS
-		case MTLPixelFormatDepth24Unorm_Stencil8:
-			// If aspect mask looking only for stencil then change to stencil-only format even if shader swizzling is needed
-			if (aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT &&
-				mvkIsAnyFlagEnabled(_imageView->_usage, (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT))) {
-				_mtlPixFmt = MTLPixelFormatX24_Stencil8;
-				if (SWIZZLE_MATCHES(R, ANY, ANY, ANY)) {
-					return VK_SUCCESS;
-				}
+		case MTLPixelFormatX24_Stencil8:
+			if (SWIZZLE_MATCHES(R, ANY, ANY, ANY)) {
+				return VK_SUCCESS;
 			}
 			break;
 #endif
@@ -2187,6 +2221,11 @@ MTLSamplerDescriptor* MVKSampler::newMTLSamplerDescriptor(const VkSamplerCreateI
     mtlSampDesc.mipFilter = (pCreateInfo->unnormalizedCoordinates
                              ? MTLSamplerMipFilterNotMipmapped
                              : mvkMTLSamplerMipFilterFromVkSamplerMipmapMode(pCreateInfo->mipmapMode));
+#if MVK_USE_METAL_PRIVATE_API
+	if (getMVKConfig().useMetalPrivateAPI) {
+		mtlSampDesc.lodBiasMVK = pCreateInfo->mipLodBias;
+	}
+#endif
 	mtlSampDesc.lodMinClamp = pCreateInfo->minLod;
 	mtlSampDesc.lodMaxClamp = pCreateInfo->maxLod;
 	mtlSampDesc.maxAnisotropy = (pCreateInfo->anisotropyEnable

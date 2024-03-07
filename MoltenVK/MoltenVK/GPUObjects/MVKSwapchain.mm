@@ -1,7 +1,7 @@
 /*
  * MVKSwapchain.mm
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -128,11 +128,11 @@ VkResult MVKSwapchain::getSurfaceStatus() {
 	return VK_SUCCESS;
 }
 
-// This swapchain is optimally sized for the surface if the app has specified 
-// deliberate swapchain scaling, or the surface extent has not changed since the
-// swapchain was created, and the surface will not need to be scaled when composited.
+// This swapchain is optimally sized for the surface if the app has specified deliberate
+// swapchain scaling, or if the surface is headless, or if the surface extent has not changed 
+// since the swapchain was created, and the surface will not need to be scaled when composited.
 bool MVKSwapchain::hasOptimalSurface() {
-	if (_isDeliberatelyScaled) { return true; }
+	if (_isDeliberatelyScaled || isHeadless()) { return true; }
 
 	VkExtent2D surfExtent = _surface->getExtent();
 	return (mvkVkExtent2DsAreEqual(surfExtent, _imageExtent) &&
@@ -190,8 +190,8 @@ void MVKSwapchain::markFrameInterval() {
 VkResult MVKSwapchain::getRefreshCycleDuration(VkRefreshCycleDurationGOOGLE *pRefreshCycleDuration) {
 	if (_device->getConfigurationResult() != VK_SUCCESS) { return _device->getConfigurationResult(); }
 
-	auto* screen = getCAMetalLayer().screenMVK;		// Will be nil if headless
 #if MVK_MACOS && !MVK_MACCAT
+    auto* screen = getCAMetalLayer().screenMVK;        // Will be nil if headless
 	double framesPerSecond = 60;
 	if (screen) {
 		CGDirectDisplayID displayId = [[[screen deviceDescription] objectForKey:@"NSScreenNumber"] unsignedIntValue];
@@ -207,6 +207,7 @@ VkResult MVKSwapchain::getRefreshCycleDuration(VkRefreshCycleDurationGOOGLE *pRe
 			framesPerSecond = 60.0;
 	}
 #elif MVK_IOS_OR_TVOS || MVK_MACCAT
+    auto* screen = getCAMetalLayer().screenMVK;        // Will be nil if headless
 	NSInteger framesPerSecond = 60;
 	if ([screen respondsToSelector: @selector(maximumFramesPerSecond)]) {
 		framesPerSecond = screen.maximumFramesPerSecond;

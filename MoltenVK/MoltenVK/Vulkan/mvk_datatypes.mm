@@ -1,7 +1,7 @@
 /*
  * mvk_datatypes.mm
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -432,6 +432,52 @@ MVK_PUBLIC_SYMBOL MTLBlendFactor mvkMTLBlendFactorFromVkBlendFactor(VkBlendFacto
         default:										return MTLBlendFactorZero;
 	}
 }
+
+#if MVK_USE_METAL_PRIVATE_API
+
+// This isn't in any public header yet. I'm really just guessing based on the D3D11 values here.
+typedef NS_ENUM(NSUInteger, MTLLogicOperation) {
+	MTLLogicOperationClear,
+	MTLLogicOperationSet,
+	MTLLogicOperationCopy,
+	MTLLogicOperationCopyInverted,
+	MTLLogicOperationNoop,
+	MTLLogicOperationInvert,
+	MTLLogicOperationAnd,
+	MTLLogicOperationNand,
+	MTLLogicOperationOr,
+	MTLLogicOperationNor,
+	MTLLogicOperationXor,
+	MTLLogicOperationEquivalence,
+	MTLLogicOperationAndReverse,
+	MTLLogicOperationAndInverted,
+	MTLLogicOperationOrReverse,
+	MTLLogicOperationOrInverted,
+};
+
+MVK_PUBLIC_SYMBOL NSUInteger mvkMTLLogicOperationFromVkLogicOp(VkLogicOp vkLogicOp) {
+	switch (vkLogicOp) {
+		case VK_LOGIC_OP_CLEAR:			return MTLLogicOperationClear;
+		case VK_LOGIC_OP_AND:			return MTLLogicOperationAnd;
+		case VK_LOGIC_OP_AND_REVERSE:	return MTLLogicOperationAndReverse;
+		case VK_LOGIC_OP_COPY:			return MTLLogicOperationCopy;
+		case VK_LOGIC_OP_AND_INVERTED:	return MTLLogicOperationAndInverted;
+		case VK_LOGIC_OP_NO_OP:			return MTLLogicOperationNoop;
+		case VK_LOGIC_OP_XOR:			return MTLLogicOperationXor;
+		case VK_LOGIC_OP_OR:			return MTLLogicOperationOr;
+		case VK_LOGIC_OP_NOR:			return MTLLogicOperationNor;
+		case VK_LOGIC_OP_EQUIVALENT:	return MTLLogicOperationEquivalence;
+		case VK_LOGIC_OP_INVERT:		return MTLLogicOperationInvert;
+		case VK_LOGIC_OP_OR_REVERSE:	return MTLLogicOperationOrReverse;
+		case VK_LOGIC_OP_COPY_INVERTED:	return MTLLogicOperationCopyInverted;
+		case VK_LOGIC_OP_OR_INVERTED:	return MTLLogicOperationOrInverted;
+		case VK_LOGIC_OP_NAND:			return MTLLogicOperationNand;
+		case VK_LOGIC_OP_SET:			return MTLLogicOperationSet;
+		default:						return MTLLogicOperationCopy;
+	}
+}
+
+#endif
 
 MVK_PUBLIC_SYMBOL MTLVertexStepFunction mvkMTLVertexStepFunctionFromVkVertexInputRate(VkVertexInputRate vkVtxStep) {
 	switch (vkVtxStep) {

@@ -1,7 +1,7 @@
 /*
  * MVKPipeline.mm
  *
- * Copyright (c) 2015-2023 The Brenwill Workshop Ltd. (http://www.brenwill.com)
+ * Copyright (c) 2015-2024 The Brenwill Workshop Ltd. (http://www.brenwill.com)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,9 @@
 #include "MVKOSExtensions.h"
 #include "MVKStrings.h"
 #include "MTLRenderPipelineDescriptor+MoltenVK.h"
+#if MVK_USE_METAL_PRIVATE_API
+#include "MTLRenderPipelineColorAttachmentDescriptor+MoltenVK.h"
+#endif
 #include "mvk_datatypes.hpp"
 
 #ifndef MVK_USE_CEREAL
@@ -304,6 +307,7 @@ void MVKGraphicsPipeline::encode(MVKCommandEncoder* cmdEncoder, uint32_t stage) 
 			cmdEncoder->_renderingState.setPrimitiveTopology(_vkPrimitiveTopology, false);
 			cmdEncoder->_renderingState.setPrimitiveRestartEnable(_primitiveRestartEnable, false);
 			cmdEncoder->_renderingState.setBlendConstants(_blendConstants, false);
+			cmdEncoder->_renderingState.setDepthBounds({_depthStencilInfo.minDepthBounds, _depthStencilInfo.maxDepthBounds}, false);
 			cmdEncoder->_renderingState.setStencilReferenceValues(_depthStencilInfo);
             cmdEncoder->_renderingState.setViewports(_viewports.contents(), 0, false);
             cmdEncoder->_renderingState.setScissors(_scissors.contents(), 0, false);
@@ -311,6 +315,7 @@ void MVKGraphicsPipeline::encode(MVKCommandEncoder* cmdEncoder, uint32_t stage) 
 				cmdEncoder->_renderingState.setCullMode(_rasterInfo.cullMode, false);
 				cmdEncoder->_renderingState.setFrontFace(_rasterInfo.frontFace, false);
 				cmdEncoder->_renderingState.setPolygonMode(_rasterInfo.polygonMode, false);
+				cmdEncoder->_renderingState.setLineWidth(_rasterInfo.lineWidth, false);
 				cmdEncoder->_renderingState.setDepthBias(_rasterInfo);
 				cmdEncoder->_renderingState.setDepthClipEnable( !_rasterInfo.depthClampEnable, false );
 			}
@@ -504,10 +509,7 @@ MVKGraphicsPipeline::MVKGraphicsPipeline(MVKDevice* device,
 
 	// Blending - must ignore allowed bad pColorBlendState pointer if rasterization disabled or no color attachments
 	if (_isRasterizingColor && pCreateInfo->pColorBlendState) {
-		mvkCopy(_blendConstants, pCreateInfo->pColorBlendState->blendConstants, 4);
-	} else {
-		static float defaultBlendConstants[4] = { 0, 0.0, 0.0, 1.0 };
-		mvkCopy(_blendConstants, defaultBlendConstants, 4);
+		mvkCopy(_blendConstants.float32, pCreateInfo->pColorBlendState->blendConstants, 4);
 	}
 
 	// Topology
@@ -1301,9 +1303,15 @@ bool MVKGraphicsPipeline::addFragmentShaderToPipeline(MTLRenderPipelineDescripto
 			shaderConfig.options.mslOptions.sample_dref_lod_array_as_grad = true;
 		}
 		if (_isRasterizing && pCreateInfo->pMultisampleState) {		// Must ignore allowed bad pMultisampleState pointer if rasterization disabled
-			if (pCreateInfo->pMultisampleState->pSampleMask && pCreateInfo->pMultisampleState->pSampleMask[0] != 0xffffffff) {
-				shaderConfig.options.mslOptions.additional_fixed_sample_mask = pCreateInfo->pMultisampleState->pSampleMask[0];
+#if MVK_USE_METAL_PRIVATE_API
+			if (!getMVKConfig().useMetalPrivateAPI) {
+#endif
+				if (pCreateInfo->pMultisampleState->pSampleMask && pCreateInfo->pMultisampleState->pSampleMask[0] != 0xffffffff) {
+					shaderConfig.options.mslOptions.additional_fixed_sample_mask = pCreateInfo->pMultisampleState->pSampleMask[0];
+				}
+#if MVK_USE_METAL_PRIVATE_API
 			}
+#endif
 			shaderConfig.options.mslOptions.force_sample_rate_shading = pCreateInfo->pMultisampleState->sampleShadingEnable && pCreateInfo->pMultisampleState->minSampleShading != 0.0f;
 		}
 		if (std::any_of(shaderOutputs.begin(), shaderOutputs.end(), [](const SPIRVShaderOutput& output) { return output.builtin == spv::BuiltInLayer; })) {
@@ -1491,7 +1499,7 @@ bool MVKGraphicsPipeline::addVertexInputToPipeline(T* inputDesc,
 					vbXltdDesc.stride = vbDesc.stride;
 					vbXltdDesc.stepFunction = vbDesc.stepFunction;
 					vbXltdDesc.stepRate = vbDesc.stepRate;
-					xldtVACnt++;
+					xldtVACnt += xltdBind.mappedAttributeCount;
 				}
 			}
 
@@ -1533,13 +1541,14 @@ uint32_t MVKGraphicsPipeline::getTranslatedVertexBinding(uint32_t binding, uint3
 	// See if a translated binding already exists (for example if more than one VA needs the same translation).
 	for (auto& xltdBind : _translatedVertexBindings) {
 		if (xltdBind.binding == binding && xltdBind.translationOffset == translationOffset) {
+			xltdBind.mappedAttributeCount++;
 			return xltdBind.translationBinding;
 		}
 	}
 
 	// Get next available binding point and add a translation binding description for it
 	uint16_t xltdBindPt = (uint16_t)(maxBinding + _translatedVertexBindings.size() + 1);
-	_translatedVertexBindings.push_back( {.binding = (uint16_t)binding, .translationBinding = xltdBindPt, .translationOffset = translationOffset} );
+	_translatedVertexBindings.push_back( {.binding = (uint16_t)binding, .translationBinding = xltdBindPt, .translationOffset = translationOffset, .mappedAttributeCount = 1u} );
 
 	return xltdBindPt;
 }
@@ -1617,6 +1626,12 @@ void MVKGraphicsPipeline::addFragmentOutputToPipeline(MTLRenderPipelineDescripto
                 colorDesc.alphaBlendOperation = mvkMTLBlendOperationFromVkBlendOp(pCA->alphaBlendOp);
                 colorDesc.sourceAlphaBlendFactor = mvkMTLBlendFactorFromVkBlendFactor(pCA->srcAlphaBlendFactor);
                 colorDesc.destinationAlphaBlendFactor = mvkMTLBlendFactorFromVkBlendFactor(pCA->dstAlphaBlendFactor);
+#if MVK_USE_METAL_PRIVATE_API
+				if (getMVKConfig().useMetalPrivateAPI) {
+					colorDesc.logicOpEnabledMVK = pCreateInfo->pColorBlendState->logicOpEnable;
+					colorDesc.logicOpMVK = mvkMTLLogicOperationFromVkLogicOp(pCreateInfo->pColorBlendState->logicOp);
+				}
+#endif
             }
         }
     }
@@ -1643,6 +1658,11 @@ void MVKGraphicsPipeline::addFragmentOutputToPipeline(MTLRenderPipelineDescripto
     // Multisampling - must ignore allowed bad pMultisampleState pointer if rasterization disabled
     if (_isRasterizing && pCreateInfo->pMultisampleState) {
         plDesc.rasterSampleCount = mvkSampleCountFromVkSampleCountFlagBits(pCreateInfo->pMultisampleState->rasterizationSamples);
+#if MVK_USE_METAL_PRIVATE_API
+        if (getMVKConfig().useMetalPrivateAPI && pCreateInfo->pMultisampleState->pSampleMask) {
+            plDesc.sampleMaskMVK = pCreateInfo->pMultisampleState->pSampleMask[0];
+        }
+#endif
         plDesc.alphaToCoverageEnabled = pCreateInfo->pMultisampleState->alphaToCoverageEnable;
         plDesc.alphaToOneEnabled = pCreateInfo->pMultisampleState->alphaToOneEnable;
 
