@@ -44,7 +44,7 @@ typedef unsigned long MTLArgumentBuffersTier;
  */
 
 
-#define MVK_PRIVATE_API_VERSION   40
+#define MVK_PRIVATE_API_VERSION   41
 
 
 #pragma mark -
@@ -64,7 +64,7 @@ typedef unsigned long MTLArgumentBuffersTier;
  */
 #define MVK_VERSION_MAJOR   1
 #define MVK_VERSION_MINOR   2
-#define MVK_VERSION_PATCH   8
+#define MVK_VERSION_PATCH   9
 
 #define MVK_MAKE_VERSION(major, minor, patch)  (((major) * 10000) + ((minor) * 100) + (patch))
 #define MVK_VERSION                            MVK_MAKE_VERSION(MVK_VERSION_MAJOR, MVK_VERSION_MINOR, MVK_VERSION_PATCH)
@@ -349,7 +349,7 @@ typedef struct {
 	VkBool32 simdPermute;							/**< If true, SIMD-group permutation functions (vote, ballot, shuffle) are supported in shaders. */
 	VkBool32 simdReduction;							/**< If true, SIMD-group reduction functions (arithmetic) are supported in shaders. */
     uint32_t minSubgroupSize;			        	/**< The minimum number of threads in a SIMD-group. */
-    VkBool32 textureBarriers;                   	/**< If true, texture barriers are supported within Metal render passes. */
+    VkBool32 textureBarriers;                   	/**< If true, texture barriers are supported within Metal render passes. Deprecated. Will always be false on all platforms. */
     VkBool32 tileBasedDeferredRendering;        	/**< If true, this device uses tile-based deferred rendering. */
 	VkBool32 argumentBuffers;						/**< If true, Metal argument buffers are supported. */
 	VkBool32 descriptorSetArgumentBuffers;			/**< If true, a Metal argument buffer can be assigned to a descriptor set, and used on any pipeline and pipeline stage. If false, a different Metal argument buffer must be used for each pipeline-stage/descriptor-set combination. */
@@ -376,6 +376,7 @@ typedef struct {
 typedef struct {
     uint32_t count;       /**< The number of activities of this type. */
 	double latest;        /**< The latest (most recent) value of the activity. */
+	double previous;      /**< The previous (second most recent) value of the activity. */
     double average;       /**< The average value of the activity. */
     double minimum;       /**< The minimum value of the activity. */
     double maximum;       /**< The maximum value of the activity. */
@@ -407,9 +408,11 @@ typedef struct {
 typedef struct {
 	MVKPerformanceTracker retrieveMTLCommandBuffer;     /** Retrieve a MTLCommandBuffer from a MTLQueue, in milliseconds. */
 	MVKPerformanceTracker commandBufferEncoding;        /** Encode a single VkCommandBuffer to a MTLCommandBuffer (excludes MTLCommandBuffer encoding from configured immediate prefilling), in milliseconds. */
+	MVKPerformanceTracker waitSubmitCommandBuffers;		/** Wait time from vkQueueSubmit() call to starting the encoding of the command buffers to the GPU, in milliseconds. Useful when MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS is disabled. */
 	MVKPerformanceTracker submitCommandBuffers;         /** Submit and encode all VkCommandBuffers in a vkQueueSubmit() operation to MTLCommandBuffers (including both prefilled and deferred encoding), in milliseconds. */
 	MVKPerformanceTracker mtlCommandBufferExecution;    /** Execute a MTLCommandBuffer on the GPU, from commit to completion callback, in milliseconds. */
 	MVKPerformanceTracker retrieveCAMetalDrawable;      /** Retrieve next CAMetalDrawable from a CAMetalLayer, in milliseconds. */
+	MVKPerformanceTracker waitPresentSwapchains;		/** Wait time from vkQueuePresentKHR() call to starting the encoding of the swapchains to the GPU, in milliseconds. Useful when MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS is disabled. */
 	MVKPerformanceTracker presentSwapchains;            /** Present the swapchains in a vkQueuePresentKHR() on the GPU, from commit to presentation callback, in milliseconds. */
 	MVKPerformanceTracker frameInterval;                /** Frame presentation interval (1000/FPS), in milliseconds. */
 } MVKQueuePerformance;
@@ -427,10 +430,6 @@ typedef struct {
  * than your app was, the size of this structure in your app may be larger or smaller than the
  * struct in MoltenVK. See the description of the vkGetPerformanceStatisticsMVK() function for
  * information about how to handle this.
- *
- * TO SUPPORT DYNAMIC LINKING TO THIS STRUCTURE AS DESCRIBED ABOVE, THIS STRUCTURE SHOULD NOT
- * BE CHANGED EXCEPT TO ADD ADDITIONAL MEMBERS ON THE END. EXISTING MEMBERS, AND THEIR ORDER,
- * SHOULD NOT BE CHANGED.
  */
 typedef struct {
 	MVKShaderCompilationPerformance shaderCompilation;	/** Shader compilations activities. */
@@ -526,11 +525,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceMetalFeaturesMVK(
  * to tell MoltenVK the limit of the size of your MVKPerformanceStatistics structure. Upon return
  * from this function, the value of *pPerfSize will hold the actual number of bytes copied into
  * your passed MVKPerformanceStatistics structure, which will be the smaller of what your app
- * thinks is the size of MVKPerformanceStatistics, and what MoltenVK thinks it is. This
- * represents the safe access area within the structure for both MoltenVK and your app.
+ * thinks is the size of MVKPerformanceStatistics, and what MoltenVK thinks it is.
  *
  * If the size that MoltenVK expects for MVKPerformanceStatistics is different than the value passed
  * in *pPerfSize, this function will return VK_INCOMPLETE, otherwise it will return VK_SUCCESS.
+ * This indicates that the data returned from this function will likely be incorrect, as the structures
+ * nested under MVKPerformanceStatistics may be different.
  *
  * Although it is not necessary, you can use this function to determine in advance the value
  * that MoltenVK expects the size of MVKPerformanceStatistics to be by setting the value of

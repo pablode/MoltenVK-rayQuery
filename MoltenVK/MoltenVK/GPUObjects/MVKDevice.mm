@@ -2153,11 +2153,11 @@ void MVKPhysicalDevice::initMetalFeatures() {
 
 	// Don't use barriers in render passes on Apple GPUs. Apple GPUs don't support them,
 	// and in fact Metal's validation layer will complain if you try to use them.
+	// Texture barriers deprecated as of macOS 10.14.
 	if ( !supportsMTLGPUFamily(Apple1) ) {
 		if (supportsMTLFeatureSet(macOS_GPUFamily1_v4)) {
 			_metalFeatures.memoryBarriers = true;
 		}
-		_metalFeatures.textureBarriers = true;
 	}
 
 #endif
@@ -4421,6 +4421,7 @@ void MVKDevice::applyMemoryBarrier(MVKPipelineBarrier& barrier,
 void MVKDevice::updateActivityPerformance(MVKPerformanceTracker& activity, double currentValue) {
 	lock_guard<mutex> lock(_perfLock);
 
+	activity.previous = activity.latest;
 	activity.latest = currentValue;
 	activity.minimum = ((activity.minimum == 0.0)
 								? currentValue :
@@ -4443,12 +4444,13 @@ void MVKDevice::logActivityInline(MVKPerformanceTracker& activity, MVKPerformanc
 }
 void MVKDevice::logActivityDuration(MVKPerformanceTracker& activity, MVKPerformanceStatistics& perfStats, bool isInline) {
 	const char* fmt = (isInline
-					   ? "%s performance avg: %.3f ms, latest: %.3f ms, min: %.3f ms, max: %.3f ms, count: %d"
-					   : "  %-45s avg: %.3f ms, latest: %.3f ms, min: %.3f ms, max: %.3f ms, count: %d");
+					   ? "%s performance avg: %.3f ms, latest: %.3f ms, prev: %.3f ms, min: %.3f ms, max: %.3f ms, count: %d"
+					   : "  %-45s avg: %.3f ms, latest: %.3f ms, prev: %.3f ms, min: %.3f ms, max: %.3f ms, count: %d");
 	MVKLogInfo(fmt,
 			   getActivityPerformanceDescription(activity, perfStats),
 			   activity.average,
 			   activity.latest,
+			   activity.previous,
 			   activity.minimum,
 			   activity.maximum,
 			   activity.count);
@@ -4456,12 +4458,13 @@ void MVKDevice::logActivityDuration(MVKPerformanceTracker& activity, MVKPerforma
 
 void MVKDevice::logActivityByteCount(MVKPerformanceTracker& activity, MVKPerformanceStatistics& perfStats, bool isInline) {
 	const char* fmt = (isInline
-					   ? "%s avg: %5llu MB, latest: %5llu MB, min: %5llu MB, max: %5llu MB, count: %d"
-					   : "  %-45s avg: %5llu MB, latest: %5llu MB, min: %5llu MB, max: %5llu MB, count: %d");
+					   ? "%s avg: %5llu MB, latest: %5llu MB, prev: %5llu MB, min: %5llu MB, max: %5llu MB, count: %d"
+					   : "  %-45s avg: %5llu MB, latest: %5llu MB, prev: %5llu MB, min: %5llu MB, max: %5llu MB, count: %d");
 	MVKLogInfo(fmt,
 			   getActivityPerformanceDescription(activity, perfStats),
 			   uint64_t(activity.average) / KIBI,
 			   uint64_t(activity.latest) / KIBI,
+			   uint64_t(activity.previous) / KIBI,
 			   uint64_t(activity.minimum) / KIBI,
 			   uint64_t(activity.maximum) / KIBI,
 			   activity.count);
