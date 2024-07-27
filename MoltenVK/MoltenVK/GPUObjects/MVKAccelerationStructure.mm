@@ -155,11 +155,12 @@ MTLAccelerationStructureDescriptor* MVKAccelerationStructure::populateMTLDescrip
         
         case VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR:
         {
-            accStructDescriptor = [MTLInstanceAccelerationStructureDescriptor new];
-            MTLInstanceAccelerationStructureDescriptor* instanceAccStructDescriptor = (MTLInstanceAccelerationStructureDescriptor*)accStructDescriptor;
+            MTLInstanceAccelerationStructureDescriptor* instance = [MTLInstanceAccelerationStructureDescriptor new];
             // add bottom level acceleration structures
             
-            instanceAccStructDescriptor.instanceDescriptorType = MTLAccelerationStructureInstanceDescriptorTypeDefault;
+            instance.instanceDescriptorType = MTLAccelerationStructureInstanceDescriptorTypeDefault;
+
+            descriptor = instance;
         } break;
     }
 
@@ -187,7 +188,7 @@ VkAccelerationStructureBuildSizesInfoKHR MVKAccelerationStructure::getBuildSizes
     if (type == VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_KHR)
         return vkBuildSizes;
     
-    MTLAccelerationStructureDescriptor* descriptor = populateMTLDescriptor(device, *info, maxPrimitiveCounts);
+    MTLAccelerationStructureDescriptor* descriptor = populateMTLDescriptor(device, *info, nullptr, maxPrimitiveCounts);
 
     MTLAccelerationStructureSizes sizes = [device->getMTLDevice() accelerationStructureSizesWithDescriptor:descriptor];
     vkBuildSizes.accelerationStructureSize = sizes.accelerationStructureSize;
