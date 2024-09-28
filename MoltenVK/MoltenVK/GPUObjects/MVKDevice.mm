@@ -435,6 +435,20 @@ void MVKPhysicalDevice::getFeatures(VkPhysicalDeviceFeatures2* features) {
 				barycentricFeatures->fragmentShaderBarycentric = true;
 				break;
 			}
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR: {
+				auto* rayQueryFeatures = (VkPhysicalDeviceRayQueryFeaturesKHR*)next;
+				rayQueryFeatures->rayQuery = true;
+				break;
+			}
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR: {
+				auto* accelerationStructureFeatures = (VkPhysicalDeviceAccelerationStructureFeaturesKHR*)next;
+				accelerationStructureFeatures->accelerationStructure = true;
+				accelerationStructureFeatures->accelerationStructureCaptureReplay = false;
+				accelerationStructureFeatures->accelerationStructureIndirectBuild = false; // TODO: later supported
+				accelerationStructureFeatures->accelerationStructureHostCommands = false;
+				accelerationStructureFeatures->descriptorBindingAccelerationStructureUpdateAfterBind = false; // TODO: likely supported by Metal
+				break;
+			}
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR: {
 				auto* portabilityFeatures = (VkPhysicalDevicePortabilitySubsetFeaturesKHR*)next;
 				portabilityFeatures->constantAlphaColorBlendFactors = true;
@@ -926,6 +940,19 @@ void MVKPhysicalDevice::getProperties(VkPhysicalDeviceProperties2* properties) {
 			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT: {
 				auto* divisorProps = (VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*)next;
 				divisorProps->maxVertexAttribDivisor = kMVKUndefinedLargeUInt32;
+				break;
+			}
+			case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR: {
+				// TODO: fill this struct with sensible values
+				auto* asProps = (VkPhysicalDeviceAccelerationStructurePropertiesKHR*)next;
+				asProps->maxGeometryCount = UINT32_MAX;
+				asProps->maxInstanceCount = UINT32_MAX;
+				asProps->maxPrimitiveCount = UINT32_MAX;
+				asProps->maxPerStageDescriptorAccelerationStructures = UINT32_MAX;
+				asProps->maxPerStageDescriptorUpdateAfterBindAccelerationStructures = UINT32_MAX;
+				asProps->maxDescriptorSetAccelerationStructures = UINT32_MAX;
+				asProps->maxDescriptorSetUpdateAfterBindAccelerationStructures = UINT32_MAX;
+				asProps->minAccelerationStructureScratchOffsetAlignment = 4;
 				break;
 			}
 			default:
