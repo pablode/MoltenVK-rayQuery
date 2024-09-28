@@ -341,6 +341,10 @@ MVK_PUBLIC_VULKAN_SYMBOL PFN_vkVoidFunction vkGetDeviceProcAddr(
 	return func;
 }
 
+static MVKDevice* createMVKDevice(MVKPhysicalDevice* mvkPD, const VkDeviceCreateInfo* pCreateInfo) {
+	@autoreleasepool { return new MVKDevice(mvkPD, pCreateInfo); }
+}
+
 MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCreateDevice(
     VkPhysicalDevice                            physicalDevice,
     const VkDeviceCreateInfo*                   pCreateInfo,
@@ -349,7 +353,7 @@ MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCreateDevice(
 
 	MVKTraceVulkanCallStart();
 	MVKPhysicalDevice* mvkPD = MVKPhysicalDevice::getMVKPhysicalDevice(physicalDevice);
-	MVKDevice* mvkDev = new MVKDevice(mvkPD, pCreateInfo);
+	MVKDevice* mvkDev = createMVKDevice(mvkPD, pCreateInfo);
 	*pDevice = mvkDev->getVkDevice();
 	VkResult rslt = mvkDev->getConfigurationResult();
 	if (rslt < 0) { *pDevice = nullptr; mvkDev->destroy(); }
@@ -3239,7 +3243,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkCmdPushDescriptorSetKHR(
 
 MVK_PUBLIC_VULKAN_SYMBOL void vkCmdPushDescriptorSetWithTemplateKHR(
     VkCommandBuffer                            commandBuffer,
-    VkDescriptorUpdateTemplate              descriptorUpdateTemplate,
+    VkDescriptorUpdateTemplate                 descriptorUpdateTemplate,
     VkPipelineLayout                           layout,
     uint32_t                                   set,
     const void*                                pData) {
@@ -3590,13 +3594,17 @@ MVK_PUBLIC_VULKAN_SYMBOL VkResult vkDebugMarkerSetObjectTagEXT(
 	return rslt;
 }
 
+static VkResult setDebugName(MVKVulkanAPIObject* mvkObj, const char* pObjectName) {
+	@autoreleasepool { return mvkObj ? mvkObj->setDebugName(pObjectName) : VK_SUCCESS; }
+}
+
 MVK_PUBLIC_VULKAN_SYMBOL VkResult vkDebugMarkerSetObjectNameEXT(
 	VkDevice                                    device,
 	const VkDebugMarkerObjectNameInfoEXT*       pNameInfo) {
 
 	MVKTraceVulkanCallStart();
 	MVKVulkanAPIObject* mvkObj = MVKVulkanAPIObject::getMVKVulkanAPIObject(pNameInfo->objectType, pNameInfo->object);
-	VkResult rslt = mvkObj ? mvkObj->setDebugName(pNameInfo->pObjectName) : VK_SUCCESS;
+	VkResult rslt = setDebugName(mvkObj, pNameInfo->pObjectName);
 	MVKTraceVulkanCallEnd();
 	return rslt;
 }
@@ -3637,7 +3645,7 @@ MVK_PUBLIC_VULKAN_SYMBOL VkResult vkSetDebugUtilsObjectNameEXT(
 
 	MVKTraceVulkanCallStart();
 	MVKVulkanAPIObject* mvkObj = MVKVulkanAPIObject::getMVKVulkanAPIObject(pNameInfo->objectType, pNameInfo->objectHandle);
-	VkResult rslt = mvkObj ? mvkObj->setDebugName(pNameInfo->pObjectName) : VK_SUCCESS;
+	VkResult rslt = setDebugName(mvkObj, pNameInfo->pObjectName);
 	MVKTraceVulkanCallEnd();
 	return rslt;
 }
@@ -4020,6 +4028,65 @@ MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCreateHeadlessSurfaceEXT(
 	if (rslt < 0) { *pSurface = VK_NULL_HANDLE; mvkInst->destroySurface(mvkSrfc, pAllocator); }
 	MVKTraceVulkanCallEnd();
 	return rslt;
+}
+
+
+#pragma mark -
+#pragma mark VK_EXT_host_image_copy extension
+
+MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCopyImageToImageEXT(
+    VkDevice                                    device,
+    const VkCopyImageToImageInfoEXT*            pCopyImageToImageInfo) {
+
+	MVKTraceVulkanCallStart();
+	VkResult rslt = MVKImage::copyImageToImage(pCopyImageToImageInfo);
+	MVKTraceVulkanCallEnd();
+	return rslt;
+}
+
+MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCopyImageToMemoryEXT(
+    VkDevice                                    device,
+    const VkCopyImageToMemoryInfoEXT*           pCopyImageToMemoryInfo) {
+
+	MVKTraceVulkanCallStart();
+	MVKImage* srcImg = (MVKImage*)pCopyImageToMemoryInfo->srcImage;
+	VkResult rslt = srcImg->copyImageToMemory(pCopyImageToMemoryInfo);
+	MVKTraceVulkanCallEnd();
+	return rslt;
+}
+
+MVK_PUBLIC_VULKAN_SYMBOL VkResult vkCopyMemoryToImageEXT(
+    VkDevice                                    device,
+	const VkCopyMemoryToImageInfoEXT*           pCopyMemoryToImageInfo) {
+
+	MVKTraceVulkanCallStart();
+	MVKImage* dstImg = (MVKImage*)pCopyMemoryToImageInfo->dstImage;
+	VkResult rslt = dstImg->copyMemoryToImage(pCopyMemoryToImageInfo);
+	MVKTraceVulkanCallEnd();
+	return rslt;
+}
+
+MVK_PUBLIC_VULKAN_SYMBOL void  vkGetImageSubresourceLayout2EXT(
+    VkDevice                                    device,
+    VkImage                                     image,
+    const VkImageSubresource2KHR*               pSubresource,
+    VkSubresourceLayout2KHR*                    pLayout) {
+
+	MVKTraceVulkanCallStart();
+	MVKImage* mvkImg = (MVKImage*)image;
+	mvkImg->getSubresourceLayout(pSubresource, pLayout);
+	MVKTraceVulkanCallEnd();
+}
+
+MVK_PUBLIC_VULKAN_SYMBOL VkResult vkTransitionImageLayoutEXT(
+    VkDevice                                    device,
+    uint32_t                                    transitionCount,
+    const VkHostImageLayoutTransitionInfoEXT*   pTransitions) {
+
+	MVKTraceVulkanCallStart();
+	// Metal lacks the concept of image layouts, so nothing to do.
+	MVKTraceVulkanCallEnd();
+	return VK_SUCCESS;
 }
 
 

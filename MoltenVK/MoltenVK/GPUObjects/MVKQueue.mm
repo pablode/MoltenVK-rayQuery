@@ -62,7 +62,7 @@ MVKQueueFamily::~MVKQueueFamily() {
 #pragma mark -
 #pragma mark MVKQueue
 
-void MVKQueue::propagateDebugName() { setLabelIfNotNil(_mtlQueue, _debugName); }
+void MVKQueue::propagateDebugName() { setMetalObjectLabel(_mtlQueue, _debugName); }
 
 
 #pragma mark Queue submissions
@@ -85,7 +85,16 @@ VkResult MVKQueue::submit(MVKQueueSubmission* qSubmit) {
 	// The submissions will ensure a misconfiguration will be safe to execute.
 	VkResult rslt = qSubmit->getConfigurationResult();
 	if (_execQueue) {
-		dispatch_async(_execQueue, ^{ execute(qSubmit); } );
+		std::unique_lock lock(_execQueueMutex);
+		_execQueueJobCount++;
+
+		dispatch_async(_execQueue, ^{
+			execute(qSubmit);
+
+			std::unique_lock execLock(_execQueueMutex);
+			if (!--_execQueueJobCount)
+				_execQueueConditionVariable.notify_all();
+		} );
 	} else {
 		rslt = execute(qSubmit);
 	}
@@ -145,17 +154,24 @@ VkResult MVKQueue::waitIdle(MVKCommandUse cmdUse) {
 	VkResult rslt = _device->getConfigurationResult();
 	if (rslt != VK_SUCCESS) { return rslt; }
 
-	auto* mtlCmdBuff = getMTLCommandBuffer(cmdUse);
-	[mtlCmdBuff commit];
-	[mtlCmdBuff waitUntilCompleted];
+	if (_execQueue) {
+		std::unique_lock lock(_execQueueMutex);
+		while (_execQueueJobCount)
+			_execQueueConditionVariable.wait(lock);
+	}
+
+	@autoreleasepool {
+		auto* mtlCmdBuff = getMTLCommandBuffer(cmdUse);
+		[mtlCmdBuff commit];
+		[mtlCmdBuff waitUntilCompleted];
+	}
 
 	return VK_SUCCESS;
 }
 
 id<MTLCommandBuffer> MVKQueue::getMTLCommandBuffer(MVKCommandUse cmdUse, bool retainRefs) {
 	id<MTLCommandBuffer> mtlCmdBuff = nil;
-	MVKDevice* mvkDev = getDevice();
-	uint64_t startTime = mvkDev->getPerformanceTimestamp();
+	uint64_t startTime = getPerformanceTimestamp();
 #if MVK_XCODE_12
 	if ([_mtlQueue respondsToSelector: @selector(commandBufferWithDescriptor:)]) {
 		MTLCommandBufferDescriptor* mtlCmdBuffDesc = [MTLCommandBufferDescriptor new];	// temp retain
@@ -172,9 +188,9 @@ id<MTLCommandBuffer> MVKQueue::getMTLCommandBuffer(MVKCommandUse cmdUse, bool re
 	} else {
 		mtlCmdBuff = [_mtlQueue commandBufferWithUnretainedReferences];
 	}
-	mvkDev->addPerformanceInterval(mvkDev->_performanceStatistics.queue.retrieveMTLCommandBuffer, startTime);
+	addPerformanceInterval(getPerformanceStats().queue.retrieveMTLCommandBuffer, startTime);
 	NSString* mtlCmdBuffLabel = getMTLCommandBufferLabel(cmdUse);
-	setLabelIfNotNil(mtlCmdBuff, mtlCmdBuffLabel);
+	setMetalObjectLabel(mtlCmdBuff, mtlCmdBuffLabel);
 	[mtlCmdBuff addCompletedHandler: ^(id<MTLCommandBuffer> mtlCB) { handleMTLCommandBufferError(mtlCB); }];
 
 	if ( !mtlCmdBuff ) { reportError(VK_ERROR_OUT_OF_POOL_MEMORY, "%s could not be acquired.", mtlCmdBuffLabel.UTF8String); }
@@ -195,6 +211,7 @@ NSString* MVKQueue::getMTLCommandBufferLabel(MVKCommandUse cmdUse) {
 		CASE_GET_LABEL(DeviceWaitIdle);
 		CASE_GET_LABEL(AcquireNextImage);
 		CASE_GET_LABEL(InvalidateMappedMemoryRanges);
+		CASE_GET_LABEL(CopyImageToMemory);
 		default:
 			MVKAssert(false, "Uncached MTLCommandBuffer label for command use %s.", mvkVkCommandName(cmdUse));
 			return [NSString stringWithFormat: @"%s MTLCommandBuffer on Queue %d-%d", mvkVkCommandName(cmdUse), _queueFamily->getIndex(), _index];
@@ -247,10 +264,15 @@ void MVKQueue::handleMTLCommandBufferError(id<MTLCommandBuffer> mtlCmdBuff) {
 			vkErr = VK_ERROR_OUT_OF_DEVICE_MEMORY;
 			break;
 	}
-	reportError(vkErr, "MTLCommandBuffer \"%s\" execution failed (code %li): %s",
-				mtlCmdBuff.label ? mtlCmdBuff.label.UTF8String : "",
-				mtlCmdBuff.error.code, mtlCmdBuff.error.localizedDescription.UTF8String);
-	if (markDeviceLoss) { getDevice()->markLost(markPhysicalDeviceLoss); }
+	if (markDeviceLoss) {
+		getDevice()->stopAutoGPUCapture(MVK_CONFIG_AUTO_GPU_CAPTURE_SCOPE_DEVICE);
+		getDevice()->markLost(markPhysicalDeviceLoss);
+	}
+	reportResult(vkErr, (markDeviceLoss ? MVK_CONFIG_LOG_LEVEL_ERROR : MVK_CONFIG_LOG_LEVEL_WARNING),
+				 "%s VkDevice after MTLCommandBuffer \"%s\" execution failed (code %li): %s",
+				 (markDeviceLoss ? "Lost" : "Resumed"),
+				 (mtlCmdBuff.label ? mtlCmdBuff.label.UTF8String : ""),
+				 mtlCmdBuff.error.code, mtlCmdBuff.error.localizedDescription.UTF8String);
 
 #if MVK_XCODE_12
 	if (&MTLCommandBufferEncoderInfoErrorKey != nullptr) {
@@ -411,11 +433,12 @@ MVKCommandBufferSubmitInfo::MVKCommandBufferSubmitInfo(VkCommandBuffer commandBu
 
 MVKQueueSubmission::MVKQueueSubmission(MVKQueue* queue,
 									   uint32_t waitSemaphoreInfoCount,
-									   const VkSemaphoreSubmitInfo* pWaitSemaphoreSubmitInfos) {
-	_queue = queue;
-	_queue->retain();	// Retain here and release in destructor. See note for MVKQueueCommandBufferSubmission::finish().
+									   const VkSemaphoreSubmitInfo* pWaitSemaphoreSubmitInfos) : 
+	MVKBaseDeviceObject(queue->getDevice()),
+	_queue(queue) {
 
-	_creationTime = getDevice()->getPerformanceTimestamp();		// call getDevice() only after _queue is defined
+	_queue->retain();	// Retain here and release in destructor. See note for MVKQueueCommandBufferSubmission::finish().
+	_creationTime = getPerformanceTimestamp();
 
 	_waitSemaphores.reserve(waitSemaphoreInfoCount);
 	for (uint32_t i = 0; i < waitSemaphoreInfoCount; i++) {
@@ -426,11 +449,12 @@ MVKQueueSubmission::MVKQueueSubmission(MVKQueue* queue,
 MVKQueueSubmission::MVKQueueSubmission(MVKQueue* queue,
 									   uint32_t waitSemaphoreCount,
 									   const VkSemaphore* pWaitSemaphores,
-									   const VkPipelineStageFlags* pWaitDstStageMask) {
-	_queue = queue;
-	_queue->retain();	// Retain here and release in destructor. See note for MVKQueueCommandBufferSubmission::finish().
+									   const VkPipelineStageFlags* pWaitDstStageMask) :
+	MVKBaseDeviceObject(queue->getDevice()),
+	_queue(queue) {
 
-	_creationTime = getDevice()->getPerformanceTimestamp();		// call getDevice() only after _queue is defined
+	_queue->retain();	// Retain here and release in destructor. See note for MVKQueueCommandBufferSubmission::finish().
+	_creationTime = getPerformanceTimestamp();
 
 	_waitSemaphores.reserve(waitSemaphoreCount);
 	for (uint32_t i = 0; i < waitSemaphoreCount; i++) {
@@ -454,8 +478,7 @@ VkResult MVKQueueCommandBufferSubmission::execute() {
 	for (auto& ws : _waitSemaphores) { ws.encodeWait(getActiveMTLCommandBuffer()); }
 
 	// Wait time from an async vkQueueSubmit() call to starting submit and encoding of the command buffers
-	MVKDevice* mvkDev = getDevice();
-	mvkDev->addPerformanceInterval(mvkDev->_performanceStatistics.queue.waitSubmitCommandBuffers, _creationTime);
+	addPerformanceInterval(_queue->getPerformanceStats().queue.waitSubmitCommandBuffers, _creationTime);
 
 	// Submit each command buffer.
 	submitCommandBuffers();
@@ -517,10 +540,9 @@ VkResult MVKQueueCommandBufferSubmission::commitActiveMTLCommandBuffer(bool sign
 	id<MTLCommandBuffer> mtlCmdBuff = signalCompletion ? getActiveMTLCommandBuffer() : _activeMTLCommandBuffer;
 	_activeMTLCommandBuffer = nil;
 
-	MVKDevice* mvkDev = getDevice();
-	uint64_t startTime = mvkDev->getPerformanceTimestamp();
+	uint64_t startTime = getPerformanceTimestamp();
 	[mtlCmdBuff addCompletedHandler: ^(id<MTLCommandBuffer> mtlCB) {
-		mvkDev->addPerformanceInterval(mvkDev->_performanceStatistics.queue.mtlCommandBufferExecution, startTime);
+		addPerformanceInterval(getPerformanceStats().queue.mtlCommandBufferExecution, startTime);
 		if (signalCompletion) { this->finish(); }	// Must be the last thing the completetion callback does.
 	}];
 
@@ -637,12 +659,11 @@ MVKQueueCommandBufferSubmission::~MVKQueueCommandBufferSubmission() {
 
 template <size_t N>
 void MVKQueueFullCommandBufferSubmission<N>::submitCommandBuffers() {
-	MVKDevice* mvkDev = getDevice();
-	uint64_t startTime = mvkDev->getPerformanceTimestamp();
+	uint64_t startTime = getPerformanceTimestamp();
 
 	for (auto& cbInfo : _cmdBuffers) { cbInfo.commandBuffer->submit(this, &_encodingContext); }
 
-	mvkDev->addPerformanceInterval(mvkDev->_performanceStatistics.queue.submitCommandBuffers, startTime);
+	addPerformanceInterval(getPerformanceStats().queue.submitCommandBuffers, startTime);
 }
 
 template <size_t N>
@@ -698,11 +719,16 @@ VkResult MVKQueuePresentSurfaceSubmission::execute() {
 	}
 
 	// Wait time from an async vkQueuePresentKHR() call to starting presentation of the swapchains
-	MVKDevice* mvkDev = getDevice();
-	mvkDev->addPerformanceInterval(mvkDev->_performanceStatistics.queue.waitPresentSwapchains, _creationTime);
+	addPerformanceInterval(getPerformanceStats().queue.waitPresentSwapchains, _creationTime);
 
 	for (int i = 0; i < _presentInfo.size(); i++ ) {
 		setConfigurationResult(_presentInfo[i].presentableImage->presentCAMetalDrawable(mtlCmdBuff, _presentInfo[i]));
+	}
+
+	if (_queue->_queueFamily->getIndex() == getMVKConfig().defaultGPUCaptureScopeQueueFamilyIndex &&
+		_queue->_index == getMVKConfig().defaultGPUCaptureScopeQueueIndex) {
+		getDevice()->stopAutoGPUCapture(MVK_CONFIG_AUTO_GPU_CAPTURE_SCOPE_ON_DEMAND);
+		getDevice()->startAutoGPUCapture(MVK_CONFIG_AUTO_GPU_CAPTURE_SCOPE_ON_DEMAND, _queue->getMTLCommandQueue());
 	}
 
 	if ( !mtlCmdBuff ) { setConfigurationResult(VK_ERROR_OUT_OF_POOL_MEMORY); }	// Check after images may set error.
@@ -765,7 +791,7 @@ MVKQueuePresentSurfaceSubmission::MVKQueuePresentSurfaceSubmission(MVKQueue* que
 	// Populate the array of swapchain images, testing each one for status
 	uint32_t scCnt = pPresentInfo->swapchainCount;
 	const VkPresentTimeGOOGLE* pPresentTimes = nullptr;
-	if (pPresentTimesInfo && pPresentTimesInfo->pTimes) {
+	if (pPresentTimesInfo) {
 		pPresentTimes = pPresentTimesInfo->pTimes;
 		MVKAssert(pPresentTimesInfo->swapchainCount == scCnt, "VkPresentTimesInfoGOOGLE swapchainCount must match VkPresentInfo swapchainCount.");
 	}
@@ -794,7 +820,6 @@ MVKQueuePresentSurfaceSubmission::MVKQueuePresentSurfaceSubmission(MVKQueue* que
 		presentInfo.presentMode = pPresentModes ? pPresentModes[scIdx] : VK_PRESENT_MODE_MAX_ENUM_KHR;
 		presentInfo.fence = pFences ? (MVKFence*)pFences[scIdx] : nullptr;
 		if (pPresentTimes) {
-			presentInfo.hasPresentTime = true;
 			presentInfo.presentID = pPresentTimes[scIdx].presentID;
 			presentInfo.desiredPresentTime = pPresentTimes[scIdx].desiredPresentTime;
 		}

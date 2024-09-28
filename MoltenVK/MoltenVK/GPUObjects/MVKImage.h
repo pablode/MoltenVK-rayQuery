@@ -226,6 +226,10 @@ public:
 	VkResult getSubresourceLayout(const VkImageSubresource* pSubresource,
 								  VkSubresourceLayout* pLayout);
 
+	/** Populates the specified layout for the specified sub-resource. */
+	VkResult getSubresourceLayout(const VkImageSubresource2KHR* pSubresource,
+								  VkSubresourceLayout2KHR* pLayout);
+
     /** Populates the specified transfer image descriptor data structure. */
     void getTransferDescriptorData(MVKImageDescriptorData& imgData);
 
@@ -251,6 +255,16 @@ public:
 
     /** Flush underlying buffer memory into the image if necessary */
     void flushToDevice(VkDeviceSize offset, VkDeviceSize size);
+
+	/** Host-copy the content of an image to another using the CPU. */
+	static VkResult copyImageToImage(const VkCopyImageToImageInfoEXT* pCopyImageToImageInfo);
+
+	/** Host-copy the content of an image to memory using the CPU. */
+	VkResult copyImageToMemory(const VkCopyImageToMemoryInfoEXT* pCopyImageToMemoryInfo);
+
+	/** Host-copy the content of an image from memory using the CPU. */
+	VkResult copyMemoryToImage(const VkCopyMemoryToImageInfoEXT* pCopyMemoryToImageInfo);
+
 
 #pragma mark Metal
 
@@ -348,6 +362,13 @@ protected:
 	uint8_t getMemoryBindingCount() const { return (uint8_t)_memoryBindings.size(); }
 	uint8_t getMemoryBindingIndex(uint8_t planeIndex) const;
 	MVKImageMemoryBinding* getMemoryBinding(uint8_t planeIndex);
+	template<typename CopyInfo> VkResult copyContent(const CopyInfo* pCopyInfo);
+	VkResult copyContent(id<MTLTexture> mtlTex,
+						 VkMemoryToImageCopyEXT imgRgn, uint32_t mipLevel, uint32_t slice,
+						 void* pImgBytes, size_t rowPitch, size_t depthPitch);
+	VkResult copyContent(id<MTLTexture> mtlTex,
+						 VkImageToMemoryCopyEXT imgRgn, uint32_t mipLevel, uint32_t slice,
+						 void* pImgBytes, size_t rowPitch, size_t depthPitch);
 
     MVKSmallVector<MVKImageMemoryBinding*, 3> _memoryBindings;
     MVKSmallVector<MVKImagePlane*, 3> _planes;
@@ -427,7 +448,6 @@ typedef struct  {
 	uint64_t desiredPresentTime;  	// VK_GOOGLE_display_timing desired presentation time in nanoseconds
 	uint32_t presentID;           	// VK_GOOGLE_display_timing presentID
 	VkPresentModeKHR presentMode;	// VK_EXT_swapchain_maintenance1 present mode specialization
-	bool hasPresentTime;      		// Keep track of whether presentation included VK_GOOGLE_display_timing
 } MVKImagePresentInfo;
 
 /** Tracks a semaphore and fence for later signaling. */
@@ -484,6 +504,7 @@ protected:
 	MVKSmallVector<MVKSwapchainSignaler, 1> _availabilitySignalers;
 	MVKSwapchainSignaler _preSignaler = {};
 	std::mutex _availabilityLock;
+	uint64_t _beginPresentTime = 0;
 	uint64_t _presentationStartTime = 0;
 };
 
@@ -641,7 +662,7 @@ public:
     VkDebugReportObjectTypeEXT getVkDebugReportObjectType() override { return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_EXT; }
     
     /** Returns the number of planes of this ycbcr conversion. */
-    inline uint8_t getPlaneCount() { return _planes; }
+    uint8_t getPlaneCount() { return _planes; }
 
     /** Writes this conversion settings to a MSL constant sampler */
     void updateConstExprSampler(SPIRV_CROSS_NAMESPACE::MSLConstexprSampler& constExprSampler) const;
@@ -679,10 +700,10 @@ public:
 	VkDebugReportObjectTypeEXT getVkDebugReportObjectType() override { return VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT; }
 
 	/** Returns the Metal sampler state. */
-	inline id<MTLSamplerState> getMTLSamplerState() { return _mtlSamplerState; }
+	id<MTLSamplerState> getMTLSamplerState() { return _mtlSamplerState; }
     
     /** Returns the number of planes if this is a ycbcr conversion or 0 otherwise. */
-    inline uint8_t getPlaneCount() { return (_ycbcrConversion) ? _ycbcrConversion->getPlaneCount() : 0; }
+    uint8_t getPlaneCount() { return (_ycbcrConversion) ? _ycbcrConversion->getPlaneCount() : 0; }
 
 	/**
 	 * If this sampler requires hardcoding in MSL, populates the hardcoded sampler in the resource binding.

@@ -86,7 +86,7 @@
 #ifdef __cplusplus
 
 /** The number of members of MVKConfiguration that are strings. */
-static constexpr uint32_t kMVKConfigurationStringCount = 1;
+static constexpr uint32_t kMVKConfigurationStringCount = 2;
 
 /** Global function to access MoltenVK configuration info. */
 const MVKConfiguration& getGlobalMVKConfig();
@@ -117,7 +117,7 @@ void mvkSetConfig(MVKConfiguration& dstMVKConfig, const MVKConfiguration& srcMVK
 
 /**
  * Process command queue submissions on the same thread on which the submission call was made.
- * The default value actually depends on whether MTLEvents are supported, becuase if MTLEvents
+ * The default value actually depends on whether MTLEvents are supported, because if MTLEvents
  * are not supported, then synchronous queues should be turned off by default to ensure the
  * CPU emulation of VkEvent behaviour does not deadlock a queue submission, whereas if MTLEvents
  * are supported, we want sychronous queues for better, and more performant, behaviour.
@@ -293,7 +293,7 @@ void mvkSetConfig(MVKConfiguration& dstMVKConfig, const MVKConfiguration& srcMVK
 #   define MVK_CONFIG_TEXTURE_1D_AS_2D    1
 #endif
 
-/** Preallocate descriptors when creating VkDescriptorPool. Enabled by default. */
+/** Obsolete, deprecated, and ignored. */
 #ifndef MVK_CONFIG_PREALLOCATE_DESCRIPTORS
 #   define MVK_CONFIG_PREALLOCATE_DESCRIPTORS    1
 #endif
@@ -323,9 +323,9 @@ void mvkSetConfig(MVKConfiguration& dstMVKConfig, const MVKConfiguration& srcMVK
 #   define MVK_CONFIG_RESUME_LOST_DEVICE    0
 #endif
 
-/** Support Metal argument buffers. Disabled by default. */
+/** Support Metal argument buffers. Enabled by default. */
 #ifndef MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS
-#   define MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS    MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS_NEVER
+#   define MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS    1
 #endif
 
 /** Compress MSL shader source code in a pipeline cache. Defaults to no compression. */
@@ -357,5 +357,16 @@ void mvkSetConfig(MVKConfiguration& dstMVKConfig, const MVKConfiguration& srcMVK
 #	define MVK_CONFIG_USE_METAL_PRIVATE_API MVK_USE_METAL_PRIVATE_API
 #endif
 
-#undef MVK_CONFIG__UNUSED_STRUCT_PADDING
-#define MVK_CONFIG__UNUSED_STRUCT_PADDING 0
+/** If set, MVK will dump spirv input, translated msl, and pipelines into the given directory. */
+#ifndef MVK_CONFIG_SHADER_DUMP_DIR
+#   define MVK_CONFIG_SHADER_DUMP_DIR ""
+#endif
+
+/**
+ * Enable logging estimated GLSL code during shader conversion.
+ * Disabled by default.
+ */
+#ifndef MVK_CONFIG_SHADER_LOG_ESTIMATED_GLSL
+#	define MVK_CONFIG_SHADER_LOG_ESTIMATED_GLSL		0
+#endif
+

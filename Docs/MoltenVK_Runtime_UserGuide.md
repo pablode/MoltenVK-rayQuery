@@ -61,7 +61,7 @@ graphics and compute functionality, that is built on Apple's [*Metal*](https://d
 graphics and compute framework on *macOS*, *iOS*, and *tvOS*. **MoltenVK** allows you to use *Vulkan*
 graphics and compute functionality to develop modern, cross-platform, high-performance graphical games
 and applications, and to run them across many platforms, including *macOS*, *iOS*, *tvOS*, *Simulators*,
-and *Mac Catalyst* on *macOS 11.0+*.
+and *Mac Catalyst*.
 
 *Metal* uses a different shading language, the *Metal Shading Language (MSL)*, than
 *Vulkan*, which uses *SPIR-V*. **MoltenVK** automatically converts your *SPIR-V* shaders
@@ -174,10 +174,11 @@ Open the *Build Phases* tab and open the *Link Binary With Libraries* list.
    - `Metal.framework`
    - `Foundation.framework`.
    - `QuartzCore.framework`
+   - `CoreGraphics.framework`
+   - `IOSurface.framework`
    - `IOKit.framework` (*macOS*)
+   - `AppKit.framework` (*macOS*)
    - `UIKit.framework` (*iOS* or *tvOS*)
-   - `IOSurface.framework` (*macOS*, or *iOS* if `IPHONEOS_DEPLOYMENT_TARGET` is at least `iOS 11.0`,
-	  or *tvOS* if `TVOS_DEPLOYMENT_TARGET` is at least `tvOS 11.0`)
 
 
 <a name="requirements"></a>
@@ -186,16 +187,10 @@ Open the *Build Phases* tab and open the *Link Binary With Libraries* list.
 **MoltenVK** references the latest *Apple SDK* frameworks. To access these frameworks when building
 your app, and to avoid build errors, be sure to use the latest publicly available version of *Xcode*.
 
->***Note:*** To support `IOSurfaces` on *iOS* or *tvOS*, any app that uses **MoltenVK** must be
-built with a minimum **iOS Deployment Target** (aka `IPHONEOS_DEPLOYMENT_TARGET `) build setting
-of `iOS 11.0` or greater, or a minimum **tvOS Deployment Target** (aka `TVOS_DEPLOYMENT_TARGET `)
-build setting of `tvOS 11.0` or greater.
-
 Once built, your app integrating the **MoltenVK** libraries can be run on *macOS*, *iOS* or *tvOS*
 devices that support *Metal*, or on the *Xcode* *iOS Simulator* or *tvOS Simulator*.
 
-- At runtime, **MoltenVK** requires at least *macOS 10.11*, *iOS 9*, or *tvOS 9*
-  (or *iOS 11* or *tvOS 11* if using `IOSurfaces`).
+- At runtime, **MoltenVK** requires at least *macOS 10.15*, *iOS 13*, or *tvOS 13*.
 - Information on *macOS* devices that are compatible with *Metal* can be found in
   [this article](http://www.idownloadblog.com/2015/06/22/how-to-find-mac-el-capitan-metal-compatible).
 - Information on *iOS* devices that are compatible with *Metal* can be found in
@@ -313,6 +308,7 @@ In addition to core *Vulkan* functionality, **MoltenVK**  also supports the foll
 - `VK_EXT_hdr_metadata`
   - *macOS only.*
 - `VK_EXT_headless_surface`
+- `VK_EXT_host_image_copy`
 - `VK_EXT_host_query_reset`
 - `VK_EXT_image_robustness`
 - `VK_EXT_inline_uniform_block`

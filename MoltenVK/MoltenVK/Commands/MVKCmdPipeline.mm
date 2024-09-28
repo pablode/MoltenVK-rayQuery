@@ -110,11 +110,13 @@ VkResult MVKCmdPipelineBarrier<N>::setContent(MVKCommandBuffer* cmdBuff,
 
 template <size_t N>
 void MVKCmdPipelineBarrier<N>::encode(MVKCommandEncoder* cmdEncoder) {
+	
+	auto& mtlFeats = cmdEncoder->getMetalFeatures();
 
 #if MVK_MACOS
 	// Calls below invoke MTLBlitCommandEncoder so must apply this first.
 	// Check if pipeline barriers are available and we are in a renderpass.
-	if (cmdEncoder->getDevice()->_pMetalFeatures->memoryBarriers && cmdEncoder->_mtlRenderEncoder) {
+	if (mtlFeats.memoryBarriers && cmdEncoder->_mtlRenderEncoder) {
 		for (auto& b : _barriers) {
 			MTLRenderStages srcStages = mvkMTLRenderStagesFromVkPipelineStageFlags(b.srcStageMask, false);
 			MTLRenderStages dstStages = mvkMTLRenderStagesFromVkPipelineStageFlags(b.dstStageMask, true);
@@ -161,7 +163,7 @@ void MVKCmdPipelineBarrier<N>::encode(MVKCommandEncoder* cmdEncoder) {
 	// into separate Metal renderpasses. Since this is a potentially expensive operation,
 	// verify that at least one attachment is being used both as an input and render attachment
 	// by checking for a VK_IMAGE_LAYOUT_GENERAL layout.
-	if (cmdEncoder->_mtlRenderEncoder && cmdEncoder->getDevice()->_pMetalFeatures->tileBasedDeferredRendering) {
+	if (cmdEncoder->_mtlRenderEncoder && mtlFeats.tileBasedDeferredRendering) {
 		bool needsRenderpassRestart = false;
 		for (auto& b : _barriers) {
 			if (b.type == MVKPipelineBarrier::Image && b.newLayout == VK_IMAGE_LAYOUT_GENERAL) {
@@ -388,7 +390,7 @@ VkResult MVKCmdPushDescriptorSet::setContent(MVKCommandBuffer* cmdBuff,
 	_pipelineLayout->retain();
 
 	// Add the descriptor writes
-	MVKDevice* mvkDvc = cmdBuff->getDevice();
+	auto& enabledExtns = cmdBuff->getEnabledExtensions();
 	clearDescriptorWrites();	// Clear for reuse
 	_descriptorWrites.reserve(descriptorWriteCount);
 	for (uint32_t dwIdx = 0; dwIdx < descriptorWriteCount; dwIdx++) {
@@ -410,7 +412,7 @@ VkResult MVKCmdPushDescriptorSet::setContent(MVKCommandBuffer* cmdBuff,
 			std::copy_n(descWrite.pTexelBufferView, descWrite.descriptorCount, pNewTexelBufferView);
 			descWrite.pTexelBufferView = pNewTexelBufferView;
 		}
-        if (mvkDvc->_enabledExtensions.vk_EXT_inline_uniform_block.enabled) {
+        if (enabledExtns.vk_EXT_inline_uniform_block.enabled) {
             const VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock = nullptr;
 			for (const auto* next = (VkBaseInStructure*)descWrite.pNext; next; next = next->pNext) {
                 switch (next->sType) {
@@ -476,49 +478,20 @@ VkResult MVKCmdPushDescriptorSetWithTemplate::setContent(MVKCommandBuffer* cmdBu
 														 uint32_t set,
 														 const void* pData) {
 	if (_pipelineLayout) { _pipelineLayout->release(); }
-
-	_descUpdateTemplate = (MVKDescriptorUpdateTemplate*)descUpdateTemplate;
 	_pipelineLayout = (MVKPipelineLayout*)layout;
-	_set = set;
-
 	_pipelineLayout->retain();
+	_set = set;
+	_descUpdateTemplate = (MVKDescriptorUpdateTemplate*)descUpdateTemplate;
 
-	if (_pData) delete[] (char*)_pData;
-	// Work out how big the memory block in pData is.
-	const VkDescriptorUpdateTemplateEntry* pEntry =
-		_descUpdateTemplate->getEntry(_descUpdateTemplate->getNumberOfEntries()-1);
-	size_t size = pEntry->offset;
-	// If we were given a stride, use that; otherwise, assume only one info
-	// struct of the appropriate type.
-	if (pEntry->stride)
-		size += pEntry->stride * pEntry->descriptorCount;
-	else switch (pEntry->descriptorType) {
-
-		case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-		case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-		case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-		case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-			size += sizeof(VkDescriptorBufferInfo);
-			break;
-
-		case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-		case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-		case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-		case VK_DESCRIPTOR_TYPE_SAMPLER:
-		case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-			size += sizeof(VkDescriptorImageInfo);
-			break;
-
-		case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-		case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-			size += sizeof(VkBufferView);
-			break;
-
-		default:
-			break;
+	size_t oldSize = _dataSize;
+	_dataSize = _descUpdateTemplate->getSize();
+	if (_dataSize > oldSize) {
+		free(_pData);
+		_pData = malloc(_dataSize);
 	}
-	_pData = new char[size];
-	memcpy(_pData, pData, size);
+	if (_pData && pData) {
+		mvkCopy(_pData, pData, _dataSize);
+	}
 
 	// Validate by encoding on a null encoder
 	encode(nullptr);
@@ -531,7 +504,7 @@ void MVKCmdPushDescriptorSetWithTemplate::encode(MVKCommandEncoder* cmdEncoder) 
 
 MVKCmdPushDescriptorSetWithTemplate::~MVKCmdPushDescriptorSetWithTemplate() {
 	if (_pipelineLayout) { _pipelineLayout->release(); }
-	if (_pData) delete[] (char*)_pData;
+	free(_pData);
 }
 
 

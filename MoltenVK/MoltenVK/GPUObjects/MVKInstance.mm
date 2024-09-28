@@ -227,7 +227,7 @@ void MVKInstance::debugReportMessage(MVKVulkanAPIObject* mvkAPIObj, MVKConfigLog
 			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CALLBACK_DATA_EXT,
 			.pNext = nullptr,
 			.flags = 0,
-			.pMessageIdName = nullptr,
+			.pMessageIdName = mvkGetReportingLevelString(logLevel),
 			.messageIdNumber = 0,
 			.pMessage = pMessage,
 			.queueLabelCount = 0,
@@ -281,21 +281,27 @@ MVKInstance::MVKInstance(const VkInstanceCreateInfo* pCreateInfo) : _enabledExte
 	initDebugCallbacks(pCreateInfo);	// Do before any creation activities
 
 	mvkSetOrClear(&_appInfo, pCreateInfo->pApplicationInfo);
-    
     if (_appInfo.apiVersion == 0) {
         _appInfo.apiVersion = VK_API_VERSION_1_0;   // Default
     }
     else if (MVK_VULKAN_API_VERSION_CONFORM(_appInfo.apiVersion) > MVK_VULKAN_API_VERSION_CONFORM(MVK_VULKAN_API_VERSION)) {
         _appInfo.apiVersion = MVK_VULKAN_API_VERSION;
     }
-    
-	initProcAddrs();		// Init function pointers
 
-	logVersions();	// Log the MoltenVK and Vulkan versions
+	// Enable extensions before setting config.
+	setConfigurationResult(verifyLayers(pCreateInfo->enabledLayerCount, pCreateInfo->ppEnabledLayerNames));
+	MVKExtensionList* pWritableExtns = (MVKExtensionList*)&_enabledExtensions;
+	setConfigurationResult(pWritableExtns->enable(pCreateInfo->enabledExtensionCount,
+												  pCreateInfo->ppEnabledExtensionNames,
+												  getDriverLayer()->getSupportedInstanceExtensions()));
+
+	initMVKConfig(pCreateInfo);		// After extensions enabled.
+	initProcAddrs();				// Init function pointers
+	logVersions();					// Log the MoltenVK and Vulkan versions. After config.
 
 	// Populate the array of physical GPU devices.
-	// This effort creates a number of autoreleased instances of Metal
-	// and other Obj-C classes, so wrap it all in an autorelease pool.
+	// This must be performed after extensions and config are established.
+	// This effort creates a number of autoreleased Metal objects, so wrap it all in an autorelease pool.
 	@autoreleasepool {
 		NSArray<id<MTLDevice>>* mtlDevices = mvkGetAvailableMTLDevicesArray(this);
 		_physicalDevices.reserve(mtlDevices.count);
@@ -312,18 +318,10 @@ MVKInstance::MVKInstance(const VkInstanceCreateInfo* pCreateInfo) : _enabledExte
 		setConfigurationResult(reportError(VK_ERROR_INCOMPATIBLE_DRIVER, "To support Mac Catalyst, MoltenVK requires macOS 11.0 or above."));
 	}
 
-	// Enable extensions after logging the system and GPU info, for any logging done during extension enablement.
-	setConfigurationResult(verifyLayers(pCreateInfo->enabledLayerCount, pCreateInfo->ppEnabledLayerNames));
-	MVKExtensionList* pWritableExtns = (MVKExtensionList*)&_enabledExtensions;
-	setConfigurationResult(pWritableExtns->enable(pCreateInfo->enabledExtensionCount,
-												  pCreateInfo->ppEnabledExtensionNames,
-												  getDriverLayer()->getSupportedInstanceExtensions()));
-	initMVKConfig(pCreateInfo);
-
 	MVKLogInfo("Created VkInstance for Vulkan version %s, as requested by app, with the following %d Vulkan extensions enabled:%s",
 			   mvkGetVulkanVersionString(_appInfo.apiVersion).c_str(),
 			   _enabledExtensions.getEnabledCount(),
-			   _enabledExtensions.enabledNamesString("\n\t\t", true).c_str());
+			   _enabledExtensions.enabledNamesString("\n\t", true).c_str());
 
 	_useCreationCallbacks = false;
 }
@@ -779,6 +777,11 @@ void MVKInstance::initProcAddrs() {
 	ADD_DVC_EXT_ENTRY_POINT(vkCmdSetSampleLocationsEnableEXT, EXT_EXTENDED_DYNAMIC_STATE_3);
 	ADD_DVC_EXT_ENTRY_POINT(vkCmdSetSampleMaskEXT, EXT_EXTENDED_DYNAMIC_STATE_3);
 	ADD_DVC_EXT_ENTRY_POINT(vkCmdSetTessellationDomainOriginEXT, EXT_EXTENDED_DYNAMIC_STATE_3);
+	ADD_DVC_EXT_ENTRY_POINT(vkCopyImageToImageEXT, EXT_HOST_IMAGE_COPY);
+	ADD_DVC_EXT_ENTRY_POINT(vkCopyImageToMemoryEXT, EXT_HOST_IMAGE_COPY);
+	ADD_DVC_EXT_ENTRY_POINT(vkCopyMemoryToImageEXT, EXT_HOST_IMAGE_COPY);
+	ADD_DVC_EXT_ENTRY_POINT(vkGetImageSubresourceLayout2EXT, EXT_HOST_IMAGE_COPY);
+	ADD_DVC_EXT_ENTRY_POINT(vkTransitionImageLayoutEXT, EXT_HOST_IMAGE_COPY);
 }
 
 void MVKInstance::logVersions() {
@@ -789,7 +792,7 @@ void MVKInstance::logVersions() {
 			   MVK_VERSION_STRING,
 			   mvkGetVulkanVersionString(getMVKConfig().apiVersionToAdvertise).c_str(),
 			   allExtns.getEnabledCount(),
-			   allExtns.enabledNamesString("\n\t\t", true).c_str());
+			   allExtns.enabledNamesString("\n\t", true).c_str());
 }
 
 VkResult MVKInstance::verifyLayers(uint32_t count, const char* const* names) {
@@ -813,5 +816,6 @@ MVKInstance::~MVKInstance() {
 
 	lock_guard<mutex> lock(_dcbLock);
 	mvkDestroyContainerContents(_debugReportCallbacks);
+	mvkDestroyContainerContents(_debugUtilMessengers);
 }
 
