@@ -42,6 +42,7 @@ typedef struct MVKMetalArgumentBuffer {
 	void setBuffer(id<MTLBuffer> mtlBuff, NSUInteger offset, uint32_t index);
 	void setTexture(id<MTLTexture> mtlTex, uint32_t index);
 	void setSamplerState(id<MTLSamplerState> mtlSamp, uint32_t index);
+	void setAccelerationStructure(id<MTLAccelerationStructure> mtlAs, uint32_t index);
 	id<MTLBuffer> getMetalArgumentBuffer() { return _mtlArgumentBuffer; }
 	NSUInteger getMetalArgumentBufferOffset() { return _mtlArgumentBufferOffset; }
 	void setArgumentBuffer(id<MTLBuffer> mtlArgBuff, NSUInteger mtlArgBuffOfst, id<MTLArgumentEncoder> mtlArgEnc);

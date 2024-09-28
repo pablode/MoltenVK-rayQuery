@@ -74,6 +74,16 @@ void MVKMetalArgumentBuffer::setSamplerState(id<MTLSamplerState> mtlSamp, uint32
 	}
 }
 
+void MVKMetalArgumentBuffer::setAccelerationStructure(id<MTLAccelerationStructure> mtlAs, uint32_t index) {
+	if (_mtlArgumentEncoder) {
+		[_mtlArgumentEncoder setAccelerationStructure: mtlAs atIndex: index];
+	} else {
+#if MVK_XCODE_14
+		*(MTLResourceID*)getArgumentPointer(index) = mtlAs.gpuResourceID;
+#endif
+	}
+}
+
 // Returns the address of the slot at the index within the Metal argument buffer.
 // This is based on the Metal 3 design that all arg buffer slots are 64 bits.
 void* MVKMetalArgumentBuffer::getArgumentPointer(uint32_t index) const {
