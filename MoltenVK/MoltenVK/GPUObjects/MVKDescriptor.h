@@ -259,7 +259,8 @@ public:
 					  VkDescriptorImageInfo* pImageInfo,
 					  VkDescriptorBufferInfo* pBufferInfo,
 					  VkBufferView* pTexelBufferView,
-					  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock) = 0;
+					  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+					  VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) = 0;
 
 	/** Encodes the usage of this resource to the Metal command encoder. */
 	virtual void encodeResourceUsage(MVKResourcesCommandEncoderState* rezEncState,
@@ -306,7 +307,8 @@ public:
 			  VkDescriptorImageInfo* pImageInfo,
 			  VkDescriptorBufferInfo* pBufferInfo,
 			  VkBufferView* pTexelBufferView,
-			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock) override;
+			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+			  VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) override;
 
 	void encodeResourceUsage(MVKResourcesCommandEncoderState* rezEncState,
 							 MVKDescriptorSetLayoutBinding* mvkDSLBind,
@@ -394,7 +396,8 @@ public:
 			  VkDescriptorImageInfo* pImageInfo,
 			  VkDescriptorBufferInfo* pBufferInfo,
 			  VkBufferView* pTexelBufferView,
-			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock) override {}
+			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+			  VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) override {}
 
 	uint32_t writeBytes(MVKDescriptorSetLayoutBinding* mvkDSLBind,
 						MVKDescriptorSet* mvkDescSet,
@@ -455,7 +458,8 @@ public:
 			  VkDescriptorImageInfo* pImageInfo,
 			  VkDescriptorBufferInfo* pBufferInfo,
 			  VkBufferView* pTexelBufferView,
-			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock) override;
+			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+			  VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) override;
 
 	void encodeResourceUsage(MVKResourcesCommandEncoderState* rezEncState,
 							 MVKDescriptorSetLayoutBinding* mvkDSLBind,
@@ -532,7 +536,8 @@ protected:
 			  VkDescriptorImageInfo* pImageInfo,
 			  VkDescriptorBufferInfo* pBufferInfo,
 			  VkBufferView* pTexelBufferView,
-			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock);
+			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+			  VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure);
 
 	void encodeResourceUsage(MVKResourcesCommandEncoderState* rezEncState,
 							 MVKDescriptorSetLayoutBinding* mvkDSLBind,
@@ -577,7 +582,8 @@ public:
 			  VkDescriptorImageInfo* pImageInfo,
 			  VkDescriptorBufferInfo* pBufferInfo,
 			  VkBufferView* pTexelBufferView,
-			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock) override;
+			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+			  VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) override;
 
 	void encodeResourceUsage(MVKResourcesCommandEncoderState* rezEncState,
 							 MVKDescriptorSetLayoutBinding* mvkDSLBind,
@@ -621,7 +627,8 @@ public:
 			  VkDescriptorImageInfo* pImageInfo,
 			  VkDescriptorBufferInfo* pBufferInfo,
 			  VkBufferView* pTexelBufferView,
-			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock) override;
+			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+			  VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) override;
 
 	void encodeResourceUsage(MVKResourcesCommandEncoderState* rezEncState,
 							 MVKDescriptorSetLayoutBinding* mvkDSLBind,
@@ -663,7 +670,8 @@ public:
 			  VkDescriptorImageInfo* pImageInfo,
 			  VkDescriptorBufferInfo* pBufferInfo,
 			  VkBufferView* pTexelBufferView,
-			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock) override;
+			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+			  VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) override;
 
 	void encodeResourceUsage(MVKResourcesCommandEncoderState* rezEncState,
 							 MVKDescriptorSetLayoutBinding* mvkDSLBind,

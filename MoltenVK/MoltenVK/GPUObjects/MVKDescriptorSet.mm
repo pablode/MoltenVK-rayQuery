@@ -120,6 +120,7 @@ void MVKDescriptorSetLayout::bindDescriptorSet(MVKCommandEncoder* cmdEncoder,
 static const void* getWriteParameters(VkDescriptorType type, const VkDescriptorImageInfo* pImageInfo,
                                       const VkDescriptorBufferInfo* pBufferInfo, const VkBufferView* pTexelBufferView,
                                       const VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock,
+                                      const VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure,
                                       size_t& stride) {
     const void* pData;
     switch (type) {
@@ -151,6 +152,11 @@ static const void* getWriteParameters(VkDescriptorType type, const VkDescriptorI
         stride = sizeof(VkWriteDescriptorSetInlineUniformBlockEXT);
         break;
 
+    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+        pData = pAccelerationStructure;
+        stride = sizeof(VkWriteDescriptorSetAccelerationStructureKHR);
+        break;
+
     default:
         pData = nullptr;
         stride = 0;
@@ -177,17 +183,16 @@ void MVKDescriptorSetLayout::pushDescriptorSet(MVKCommandEncoder* cmdEncoder,
         const VkDescriptorBufferInfo* pBufferInfo = descWrite.pBufferInfo;
         const VkBufferView* pTexelBufferView = descWrite.pTexelBufferView;
         const VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock = nullptr;
-        if (enabledExtns.vk_EXT_inline_uniform_block.enabled) {
-			for (const auto* next = (VkBaseInStructure*)descWrite.pNext; next; next = next->pNext) {
-                switch (next->sType) {
-                case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT: {
-					pInlineUniformBlock = (VkWriteDescriptorSetInlineUniformBlockEXT*)next;
-                    break;
-                }
-                default:
-                    break;
-                }
-            }
+	const VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure = nullptr;
+        if (enabledExtns.vk_EXT_inline_uniform_block.enabled || enabledExtns.vk_KHR_acceleration_structure.enabled) {
+		for (const auto* next = (VkBaseInStructure*)descWrite.pNext; next; next = next->pNext) {
+			if (next->sType == VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT) {
+				pInlineUniformBlock = (VkWriteDescriptorSetInlineUniformBlockEXT*)next;
+			}
+			if (next->sType == VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR) {
+				pAccelerationStructure = (VkWriteDescriptorSetAccelerationStructureKHR*)next;
+			}
+		}
         }
         if (!_bindingToIndex.count(dstBinding)) continue;
         // Note: This will result in us walking off the end of the array
@@ -195,8 +200,8 @@ void MVKDescriptorSetLayout::pushDescriptorSet(MVKCommandEncoder* cmdEncoder,
         for (; descriptorCount; dstBinding++) {
             if (!_bindingToIndex.count(dstBinding)) continue;
             size_t stride;
-            const void* pData = getWriteParameters(descWrite.descriptorType, pImageInfo,
-                                                   pBufferInfo, pTexelBufferView, pInlineUniformBlock, stride);
+            const void* pData = getWriteParameters(descWrite.descriptorType, pImageInfo, pBufferInfo, pTexelBufferView,
+						   pInlineUniformBlock, pAccelerationStructure, stride);
             uint32_t descriptorsPushed = 0;
             uint32_t bindIdx = _bindingToIndex[dstBinding];
             _bindings[bindIdx].push(cmdEncoder, pipelineBindPoint, dstArrayElement, descriptorCount,
@@ -507,7 +512,8 @@ void MVKDescriptorSet::read(const VkCopyDescriptorSet* pDescriptorCopy,
 							VkDescriptorImageInfo* pImageInfo,
 							VkDescriptorBufferInfo* pBufferInfo,
 							VkBufferView* pTexelBufferView,
-							VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock) {
+							VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock,
+							VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) {
 
 	MVKDescriptorSetLayoutBinding* mvkDSLBind = _layout->getBinding(pDescriptorCopy->srcBinding);
 	VkDescriptorType descType = mvkDSLBind->getDescriptorType();
@@ -534,7 +540,7 @@ void MVKDescriptorSet::read(const VkCopyDescriptorSet* pDescriptorCopy,
 		uint32_t descIdx = _layout->getDescriptorIndex(pDescriptorCopy->srcBinding, srcElemIdx);
 		uint32_t descCnt = pDescriptorCopy->descriptorCount;
 		while (dstElemIdx < descCnt) {
-			_descriptors[descIdx++]->read(mvkDSLBind, this, dstElemIdx++, pImageInfo, pBufferInfo, pTexelBufferView, pInlineUniformBlock);
+			_descriptors[descIdx++]->read(mvkDSLBind, this, dstElemIdx++, pImageInfo, pBufferInfo, pTexelBufferView, pInlineUniformBlock, pAccelerationStructure);
 		}
     }
 }
@@ -1238,22 +1244,22 @@ void mvkUpdateDescriptorSets(uint32_t writeCount,
 		if( !dstSet ) { continue; }		// Nulls are permitted
 
 		const VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock = nullptr;
-		if (dstSet->getEnabledExtensions().vk_EXT_inline_uniform_block.enabled) {
+		const VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure = nullptr;
+		if (dstSet->getEnabledExtensions().vk_EXT_inline_uniform_block.enabled ||
+		    dstSet->getEnabledExtensions().vk_KHR_acceleration_structure.enabled) {
 			for (const auto* next = (VkBaseInStructure*)pDescWrite->pNext; next; next = next->pNext) {
-				switch (next->sType) {
-				case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT: {
+				if (next->sType == VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT) {
 					pInlineUniformBlock = (VkWriteDescriptorSetInlineUniformBlockEXT*)next;
-					break;
 				}
-				default:
-					break;
+				if (next->sType == VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR) {
+					pAccelerationStructure = (VkWriteDescriptorSetAccelerationStructureKHR*)next;
 				}
 			}
 		}
 
 		const void* pData = getWriteParameters(pDescWrite->descriptorType, pDescWrite->pImageInfo,
-											   pDescWrite->pBufferInfo, pDescWrite->pTexelBufferView,
-											   pInlineUniformBlock, stride);
+						       pDescWrite->pBufferInfo, pDescWrite->pTexelBufferView,
+						       pInlineUniformBlock, pAccelerationStructure, stride);
 		dstSet->write(pDescWrite, stride, pData);
 	}
 
@@ -1265,6 +1271,12 @@ void mvkUpdateDescriptorSets(uint32_t writeCount,
 		VkDescriptorImageInfo imgInfos[descCnt];
 		VkDescriptorBufferInfo buffInfos[descCnt];
 		VkBufferView texelBuffInfos[descCnt];
+		VkWriteDescriptorSetAccelerationStructureKHR accelerationStructures[descCnt];
+		for (uint32_t j = 0; j < descCnt; j++)
+		{
+			accelerationStructures[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+			accelerationStructures[j].pNext = nullptr;
+		}
 
 		// For inline block create a temp buffer of descCnt bytes to hold data during copy.
 		uint8_t dstBuffer[descCnt];
@@ -1278,10 +1290,10 @@ void mvkUpdateDescriptorSets(uint32_t writeCount,
 		MVKDescriptorSet* dstSet = (MVKDescriptorSet*)pDescCopy->dstSet;
 		if( !srcSet || !dstSet ) { continue; }		// Nulls are permitted
 
-		srcSet->read(pDescCopy, imgInfos, buffInfos, texelBuffInfos, &inlineUniformBlock);
+		srcSet->read(pDescCopy, imgInfos, buffInfos, texelBuffInfos, &inlineUniformBlock, accelerationStructures);
 		VkDescriptorType descType = dstSet->getDescriptorType(pDescCopy->dstBinding);
 		size_t stride;
-		const void* pData = getWriteParameters(descType, imgInfos, buffInfos, texelBuffInfos, &inlineUniformBlock, stride);
+		const void* pData = getWriteParameters(descType, imgInfos, buffInfos, texelBuffInfos, &inlineUniformBlock, accelerationStructures, stride);
 		dstSet->write(pDescCopy, stride, pData);
 	}
 }

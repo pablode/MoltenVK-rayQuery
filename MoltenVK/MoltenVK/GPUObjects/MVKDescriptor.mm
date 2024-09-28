@@ -841,7 +841,8 @@ void MVKBufferDescriptor::read(MVKDescriptorSetLayoutBinding* mvkDSLBind,
 							   VkDescriptorImageInfo* pImageInfo,
 							   VkDescriptorBufferInfo* pBufferInfo,
 							   VkBufferView* pTexelBufferView,
-							   VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock) {
+							   VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+							   VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) {
 	auto& buffInfo = pBufferInfo[dstIndex];
 	buffInfo.buffer = (VkBuffer)_mvkBuffer;
 	buffInfo.offset = _buffOffset;
@@ -1050,7 +1051,8 @@ void MVKImageDescriptor::read(MVKDescriptorSetLayoutBinding* mvkDSLBind,
 							  VkDescriptorImageInfo* pImageInfo,
 							  VkDescriptorBufferInfo* pBufferInfo,
 							  VkBufferView* pTexelBufferView,
-							  VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock) {
+							  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+							  VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) {
 	auto& imgInfo = pImageInfo[dstIndex];
 	imgInfo.imageView = (VkImageView)_mvkImageView;
 	imgInfo.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -1151,7 +1153,8 @@ void MVKSamplerDescriptorMixin::read(MVKDescriptorSetLayoutBinding* mvkDSLBind,
 									 VkDescriptorImageInfo* pImageInfo,
 									 VkDescriptorBufferInfo* pBufferInfo,
 									 VkBufferView* pTexelBufferView,
-									 VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock) {
+									 VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+									 VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) {
 	auto& imgInfo = pImageInfo[dstIndex];
 	imgInfo.sampler = (VkSampler)_mvkSampler;
 }
@@ -1192,8 +1195,9 @@ void MVKSamplerDescriptor::read(MVKDescriptorSetLayoutBinding* mvkDSLBind,
 								VkDescriptorImageInfo* pImageInfo,
 								VkDescriptorBufferInfo* pBufferInfo,
 								VkBufferView* pTexelBufferView,
-								VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock) {
-	MVKSamplerDescriptorMixin::read(mvkDSLBind, mvkDescSet, dstIndex, pImageInfo, pBufferInfo, pTexelBufferView, pInlineUniformBlock);
+								VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock,
+								VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) {
+	MVKSamplerDescriptorMixin::read(mvkDSLBind, mvkDescSet, dstIndex, pImageInfo, pBufferInfo, pTexelBufferView, pInlineUniformBlock, pAccelerationStructure);
 }
 
 void MVKSamplerDescriptor::reset() {
@@ -1234,9 +1238,10 @@ void MVKCombinedImageSamplerDescriptor::read(MVKDescriptorSetLayoutBinding* mvkD
 											 VkDescriptorImageInfo* pImageInfo,
 											 VkDescriptorBufferInfo* pBufferInfo,
 											 VkBufferView* pTexelBufferView,
-											 VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock) {
-	MVKImageDescriptor::read(mvkDSLBind, mvkDescSet, dstIndex, pImageInfo, pBufferInfo, pTexelBufferView, pInlineUniformBlock);
-	MVKSamplerDescriptorMixin::read(mvkDSLBind, mvkDescSet, dstIndex, pImageInfo, pBufferInfo, pTexelBufferView, pInlineUniformBlock);
+											 VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock,
+											 VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) {
+	MVKImageDescriptor::read(mvkDSLBind, mvkDescSet, dstIndex, pImageInfo, pBufferInfo, pTexelBufferView, pInlineUniformBlock, pAccelerationStructure);
+	MVKSamplerDescriptorMixin::read(mvkDSLBind, mvkDescSet, dstIndex, pImageInfo, pBufferInfo, pTexelBufferView, pInlineUniformBlock, pAccelerationStructure);
 }
 
 void MVKCombinedImageSamplerDescriptor::encodeResourceUsage(MVKResourcesCommandEncoderState* rezEncState,
@@ -1325,7 +1330,8 @@ void MVKTexelBufferDescriptor::read(MVKDescriptorSetLayoutBinding* mvkDSLBind,
 									VkDescriptorImageInfo* pImageInfo,
 									VkDescriptorBufferInfo* pBufferInfo,
 									VkBufferView* pTexelBufferView,
-									VkWriteDescriptorSetInlineUniformBlockEXT* pInlineUniformBlock) {
+									VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+									VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) {
 	pTexelBufferView[dstIndex] = (VkBufferView)_mvkBufferView;
 }
 
