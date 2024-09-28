@@ -225,3 +225,18 @@ typedef struct MVKPipelineBarrier {
 
 } MVKPipelineBarrier;
 
+/** Describes a MTLAccelerationStructure resource binding. */
+typedef struct MVKMTLAccelerationStructureBinding {
+    union { id<MTLAccelerationStructure> mtlAccelerationStructure = nil; id<MTLAccelerationStructure> mtlResource; }; // aliases
+    uint16_t index = 0;
+    bool isDirty = true;
+
+    inline void markDirty() { isDirty = true; }
+
+    inline void update(const MVKMTLAccelerationStructureBinding &other) {
+        if (mtlAccelerationStructure != other.mtlAccelerationStructure) {
+            mtlAccelerationStructure = other.mtlAccelerationStructure;
+            markDirty();
+        }
+    }
+} MVKMTLAccelerationStructureBinding;
