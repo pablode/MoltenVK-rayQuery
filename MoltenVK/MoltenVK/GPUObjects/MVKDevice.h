@@ -764,6 +764,10 @@ public:
     /** Returns a pointer to the acceleration structure at the provided address*/
     MVKAccelerationStructure* getAccelerationStructureAtAddress(uint64_t address);
 
+    /** Gets the required build sizes for acceleration structure and scratch buffer*/
+    VkAccelerationStructureBuildSizesInfoKHR getBuildSizes(VkAccelerationStructureBuildTypeKHR buildType,
+                                                           const VkAccelerationStructureBuildGeometryInfoKHR* buildInfo,
+                                                           const uint32_t* maxPrimitiveCounts);
 
 #pragma mark Metal
 

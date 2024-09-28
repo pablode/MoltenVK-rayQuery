@@ -2923,7 +2923,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkGetAccelerationStructureBuildSizesKHR(
     
     MVKTraceVulkanCallStart();
     MVKDevice* mvkDev = (MVKDevice*)device;
-    *pSizeInfo = MVKAccelerationStructure::getBuildSizes(mvkDev, buildType, pBuildInfo, pMaxPrimitiveCounts);
+    *pSizeInfo = mvkDev->getBuildSizes(buildType, pBuildInfo, pMaxPrimitiveCounts);
     MVKTraceVulkanCallEnd();
 }
 

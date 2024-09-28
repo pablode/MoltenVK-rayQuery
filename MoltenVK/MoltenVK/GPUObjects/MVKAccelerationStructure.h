@@ -58,12 +58,6 @@ public:
                                                                      const VkAccelerationStructureBuildGeometryInfoKHR& buildInfo,
                                                                      const VkAccelerationStructureBuildRangeInfoKHR* rangeInfos,
                                                                      const uint32_t* maxPrimitiveCounts);
-
-    /** Gets the required build sizes for acceleration structure and scratch buffer*/
-    static VkAccelerationStructureBuildSizesInfoKHR getBuildSizes(MVKDevice* device,
-                                                                  VkAccelerationStructureBuildTypeKHR buildType,
-                                                                  const VkAccelerationStructureBuildGeometryInfoKHR* buildInfo,
-                                                                  const uint32_t* maxPrimitiveCounts);
     
     /** Gets the actual size of the acceleration structure*/
     uint64_t getMTLSize();

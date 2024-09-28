@@ -3857,6 +3857,27 @@ VkAccelerationStructureCompatibilityKHR MVKDevice::getAccelerationStructureCompa
     return VK_ACCELERATION_STRUCTURE_COMPATIBILITY_INCOMPATIBLE_KHR;
 }
 
+VkAccelerationStructureBuildSizesInfoKHR MVKDevice::getBuildSizes(VkAccelerationStructureBuildTypeKHR buildType,
+                                                                  const VkAccelerationStructureBuildGeometryInfoKHR* buildInfo,
+                                                                  const uint32_t* maxPrimitiveCounts)
+{
+    VkAccelerationStructureBuildSizesInfoKHR vkBuildSizes{};
+
+    if (buildType == VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_KHR) {
+        reportMessage(MVK_CONFIG_LOG_LEVEL_ERROR, "Could not query build sizes for host acceleration structure: not supported\n");
+        return vkBuildSizes;
+    }
+
+    MTLAccelerationStructureDescriptor* descriptor = MVKAccelerationStructure::populateMTLDescriptor(this, *buildInfo, nullptr, maxPrimitiveCounts);
+    id<MTLDevice> mtlDev = _physicalDevice->_mtlDevice;
+
+    MTLAccelerationStructureSizes sizes = [mtlDev accelerationStructureSizesWithDescriptor:descriptor];
+    vkBuildSizes.accelerationStructureSize = sizes.accelerationStructureSize;
+    vkBuildSizes.buildScratchSize = sizes.buildScratchBufferSize;
+    vkBuildSizes.updateScratchSize = sizes.refitScratchBufferSize;
+    return vkBuildSizes;
+}
+
 #pragma mark Object lifecycle
 
 uint32_t MVKDevice::getVulkanMemoryTypeIndex(MTLStorageMode mtlStorageMode) {

@@ -177,27 +177,6 @@ MTLAccelerationStructureDescriptor* MVKAccelerationStructure::populateMTLDescrip
     return descriptor;
 }
 
-VkAccelerationStructureBuildSizesInfoKHR MVKAccelerationStructure::getBuildSizes(MVKDevice* device,
-                                                                                 VkAccelerationStructureBuildTypeKHR type,
-                                                                                 const VkAccelerationStructureBuildGeometryInfoKHR* info,
-                                                                                 const uint32_t* maxPrimitiveCounts)
-{
-    VkAccelerationStructureBuildSizesInfoKHR vkBuildSizes{};
-    
-    // TODO: We can't perform host builds, throw an error?
-    if (type == VK_ACCELERATION_STRUCTURE_BUILD_TYPE_HOST_KHR)
-        return vkBuildSizes;
-    
-    MTLAccelerationStructureDescriptor* descriptor = populateMTLDescriptor(device, *info, nullptr, maxPrimitiveCounts);
-
-    MTLAccelerationStructureSizes sizes = [device->getMTLDevice() accelerationStructureSizesWithDescriptor:descriptor];
-    vkBuildSizes.accelerationStructureSize = sizes.accelerationStructureSize;
-    vkBuildSizes.buildScratchSize = sizes.buildScratchBufferSize;
-    vkBuildSizes.updateScratchSize = sizes.refitScratchBufferSize;
-    
-    return vkBuildSizes;
-}
-
 uint64_t MVKAccelerationStructure::getMTLSize()
 {
     if (!_built) { return 0; }
