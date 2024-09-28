@@ -37,13 +37,13 @@ VkResult MVKCmdBuildAccelerationStructure::setContent(MVKCommandBuffer*         
         MVKAccelerationStructureBuildInfo& info = _buildInfos.emplace_back();
         info.info = pInfos[i];
 
-        // TODO: ppGeometries
-        info.geometries.reserve(pInfos[i].geometryCount);
-        info.ranges.reserve(pInfos[i].geometryCount);
+        info.geometries.resize(pInfos[i].geometryCount);
+        info.ranges.resize(pInfos[i].geometryCount);
         memcpy(info.geometries.data(), pInfos[i].pGeometries, pInfos[i].geometryCount);
         memcpy(info.ranges.data(), ppBuildRangeInfos[i], pInfos[i].geometryCount);
 
         info.info.pGeometries = info.geometries.data();
+        info.info.ppGeometries = &info.info.pGeometries;
     }
 
     return VK_SUCCESS;
