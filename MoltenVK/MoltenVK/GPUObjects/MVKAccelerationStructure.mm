@@ -27,6 +27,17 @@
 
 id<MTLAccelerationStructure> MVKAccelerationStructure::getMTLAccelerationStructure()
 {
+    if (!_accelerationStructure)
+    {
+        MTLHeapDescriptor* heapDescriptor = [MTLHeapDescriptor new];
+        heapDescriptor.storageMode = MTLStorageModePrivate;
+        heapDescriptor.size = _buildSizes.accelerationStructureSize;
+        _heap = [getMTLDevice() newHeapWithDescriptor:heapDescriptor];
+
+        _accelerationStructure = [_heap newAccelerationStructureWithSize:_buildSizes.accelerationStructureSize];
+        //_buffer = [_heap newBufferWithLength:_buildSizes.buildScratchSize options:MTLResourceStorageModePrivate];
+    }
+
     return _accelerationStructure;
 }
     
@@ -35,18 +46,23 @@ MTLAccelerationStructureDescriptor* MVKAccelerationStructure::populateMTLDescrip
                                                                                     const VkAccelerationStructureBuildRangeInfoKHR* rangeInfos,
                                                                                     const uint32_t* maxPrimitiveCounts)
 {
+
+
     MTLAccelerationStructureDescriptor* descriptor = nullptr;
 
     switch (buildInfo.type)
     {
         default:
-            break; // TODO: throw error
+        {
+            // TODO: throw error
+            break;
+        }
         case VK_ACCELERATION_STRUCTURE_TYPE_GENERIC_KHR:
         {
-            // TODO: should building generic not be allowed?
-            // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkAccelerationStructureTypeKHR.html
-        } break;
-
+            // not allowed according to spec
+            // TODO: throw error
+            return nullptr;
+        }
         case VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR:
         {
             MTLPrimitiveAccelerationStructureDescriptor* primitive = [MTLPrimitiveAccelerationStructureDescriptor new];
@@ -72,10 +88,11 @@ MTLAccelerationStructureDescriptor* MVKAccelerationStructure::populateMTLDescrip
                         uint64_t indexBDA = triangleData.indexData.deviceAddress;
                         uint64_t transformBDA = triangleData.transformData.deviceAddress;
                         MVKBuffer* mvkVertexBuffer = device->getBufferAtAddress(vertexBDA);
+			assert(mvkVertexBuffer);
+			if (!mvkVertexBuffer) return nullptr;
                         MVKBuffer* mvkIndexBuffer = device->getBufferAtAddress(indexBDA);
                         MVKBuffer* mvkTransformBuffer = device->getBufferAtAddress(transformBDA);
 
-                        // TODO: should validate that buffer->getMTLBufferOffset is a multiple of vertexStride. This could cause issues
                         NSUInteger vbOffset = (vertexBDA - mvkVertexBuffer->getMTLBufferGPUAddress()) + mvkVertexBuffer->getMTLBufferOffset();
                         NSUInteger ibOffset = 0;
                         NSUInteger tfOffset = 0;
@@ -87,8 +104,11 @@ MTLAccelerationStructureDescriptor* MVKAccelerationStructure::populateMTLDescrip
                         if (transformBDA && mvkTransformBuffer)
                         {
                             tfOffset = (transformBDA - mvkTransformBuffer->getMTLBufferGPUAddress()) + mvkTransformBuffer->getMTLBufferOffset();
+#ifdef MVK_XCODE_16
                             geometryTriangles.transformationMatrixBuffer = mvkTransformBuffer->getMTLBuffer();
+#endif
                         }
+			else geometryTriangles.transformationMatrixBuffer = nil;
 
                         bool useIndices = indexBDA && mvkIndexBuffer && triangleData.indexType != VK_INDEX_TYPE_NONE_KHR;
                         if (useIndices)
@@ -103,7 +123,9 @@ MTLAccelerationStructureDescriptor* MVKAccelerationStructure::populateMTLDescrip
                             // Utilize range information during build time
 
                             geometryTriangles.triangleCount = rangeInfos[i].primitiveCount;
+#ifdef MVK_XCODE_16
                             geometryTriangles.transformationMatrixBufferOffset = tfOffset + rangeInfos[i].transformOffset;
+#endif
                             geometryTriangles.vertexBufferOffset = vbOffset;
                             geometryTriangles.indexBufferOffset = ibOffset + rangeInfos[i].primitiveOffset;
 
@@ -117,7 +139,9 @@ MTLAccelerationStructureDescriptor* MVKAccelerationStructure::populateMTLDescrip
                             geometryTriangles.vertexBufferOffset = vbOffset;
                             geometryTriangles.triangleCount = maxPrimitiveCounts[i];
                             geometryTriangles.indexBufferOffset = ibOffset;
+#ifdef MVK_XCODE_16
                             geometryTriangles.transformationMatrixBufferOffset = 0;
+#endif
                         }
 
                         [geoms addObject:geometryTriangles];
@@ -185,17 +209,12 @@ uint64_t MVKAccelerationStructure::getMTLSize()
 
 MVKAccelerationStructure::MVKAccelerationStructure(MVKDevice* device) : MVKVulkanAPIDeviceObject(device)
 {
-    MTLHeapDescriptor* heapDescriptor = [MTLHeapDescriptor new];
-    heapDescriptor.storageMode = MTLStorageModePrivate;
-//    heapDescriptor.size = getBuildSizes().accelerationStructureSize;
-    _heap = [getMTLDevice() newHeapWithDescriptor:heapDescriptor];
-    
-//    _accelerationStructure = [_heap newAccelerationStructureWithSize:getBuildSizes().accelerationStructureSize];
-//    _buffer = [_heap newBufferWithLength:getBuildSizes().accelerationStructureSize options:MTLResourceOptionCPUCacheModeDefault];
 }
 
 void MVKAccelerationStructure::destroy()
 {
-    [_heap release];
+    if (_accelerationStructure) [_accelerationStructure release];
+    if (_buffer) [_buffer release];
+    if (_heap) [_heap release];
     _built = false;
 }

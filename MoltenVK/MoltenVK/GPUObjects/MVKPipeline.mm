@@ -2641,7 +2641,8 @@ namespace SPIRV_CROSS_NAMESPACE {
 				rb.count,
 				rb.msl_buffer,
 				rb.msl_texture,
-				rb.msl_sampler);
+				rb.msl_sampler,
+				rb.msl_acceleration_structure);
 	}
 
 	template<class Archive>

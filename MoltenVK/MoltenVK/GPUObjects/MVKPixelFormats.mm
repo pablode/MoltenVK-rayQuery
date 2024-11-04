@@ -1653,6 +1653,7 @@ typedef enum : VkFormatFeatureFlags2 {
                                                                                    VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT),
 	kMVKVkFormatFeatureFlagsBufAtomic   = (VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_ATOMIC_BIT),
 	kMVKVkFormatFeatureFlagsBufVertex   = (VK_FORMAT_FEATURE_2_VERTEX_BUFFER_BIT),
+	kMVKVkFormatFeatureFlagsBufAccelerationStructure = (VK_FORMAT_FEATURE_2_ACCELERATION_STRUCTURE_VERTEX_BUFFER_BIT_KHR)
 } MVKVkFormatFeatureFlags;
 
 // Sets the VkFormatProperties (optimal/linear/buffer) for the Vulkan format.
@@ -1732,4 +1733,8 @@ void MVKPixelFormats::setFormatProperties(MVKVkFormatDesc& vkDesc, const MVKMTLD
 		enableFormatFeatures(Atomic, Buf, mtlPixFmtCaps, vkProps.bufferFeatures);
 		enableFormatFeatures(Vertex, Buf, getMTLVertexFormatDesc(vkDesc.mtlVertexFormat).mtlFmtCaps, vkProps.bufferFeatures);
 	}
+
+	// TODO: only enable on platforms where AS feature is supported
+	//enableFormatFeatures(BufAccelerationStructure, Buf, mtlPixFmtCaps, vkProps.bufferFeatures);
+	mvkEnableFlags(vkProps.bufferFeatures, kMVKVkFormatFeatureFlagsBufAccelerationStructure);
 }

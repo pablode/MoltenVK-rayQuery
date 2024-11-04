@@ -34,16 +34,23 @@ VkResult MVKCmdBuildAccelerationStructure::setContent(MVKCommandBuffer*         
     _buildInfos.reserve(infoCount);
     for (uint32_t i = 0; i < infoCount; i++)
     {
+        uint32_t geometryCount = pInfos[i].geometryCount;
+
         MVKAccelerationStructureBuildInfo& info = _buildInfos.emplace_back();
         info.info = pInfos[i];
 
-        info.geometries.resize(pInfos[i].geometryCount);
-        info.ranges.resize(pInfos[i].geometryCount);
-        memcpy(info.geometries.data(), pInfos[i].pGeometries, pInfos[i].geometryCount);
-        memcpy(info.ranges.data(), ppBuildRangeInfos[i], pInfos[i].geometryCount);
+        info.geometries.resize(geometryCount);
+        info.ranges.resize(geometryCount);
 
+        memcpy(info.geometries.data(), pInfos[i].pGeometries, geometryCount * sizeof(VkAccelerationStructureBuildGeometryInfoKHR));
+        for (uint32_t j = 0; j < geometryCount; j++)
+        {
+            memcpy(&info.ranges[i], ppBuildRangeInfos[i], sizeof(VkAccelerationStructureBuildRangeInfoKHR));
+        }
+
+        info.info.geometryCount = geometryCount;
         info.info.pGeometries = info.geometries.data();
-        info.info.ppGeometries = &info.info.pGeometries;
+        info.info.ppGeometries = nullptr;
     }
 
     return VK_SUCCESS;
@@ -52,17 +59,40 @@ VkResult MVKCmdBuildAccelerationStructure::setContent(MVKCommandBuffer*         
 void MVKCmdBuildAccelerationStructure::encode(MVKCommandEncoder* cmdEncoder) {
     id<MTLAccelerationStructureCommandEncoder> accStructEncoder = cmdEncoder->getMTLAccelerationStructureEncoder(kMVKCommandUseBuildAccelerationStructure);
     
+        MVKDevice* mvkDevice = cmdEncoder->getDevice();
     for (MVKAccelerationStructureBuildInfo& entry : _buildInfos)
     {
         VkAccelerationStructureBuildGeometryInfoKHR& buildInfo = entry.info;
 
-        MVKAccelerationStructure* mvkSrcAccStruct = (MVKAccelerationStructure*)buildInfo.srcAccelerationStructure;
-        MVKAccelerationStructure* mvkDstAccStruct = (MVKAccelerationStructure*)buildInfo.dstAccelerationStructure;
+        id<MTLAccelerationStructure> srcAccStruct = nullptr;
+	if (buildInfo.srcAccelerationStructure != VK_NULL_HANDLE)
+	{
+		MVKAccelerationStructure* mvkSrcAccStruct = (MVKAccelerationStructure*)buildInfo.srcAccelerationStructure;
+		srcAccStruct = mvkSrcAccStruct->getMTLAccelerationStructure();
+	}
 
-        id<MTLAccelerationStructure> srcAccStruct = mvkSrcAccStruct->getMTLAccelerationStructure();
+	MTLAccelerationStructureDescriptor* descriptor = nullptr;
+        MVKAccelerationStructure* mvkDstAccStruct = (MVKAccelerationStructure*)buildInfo.dstAccelerationStructure;
+        if (buildInfo.mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR)
+        {
+            descriptor = mvkDstAccStruct->populateMTLDescriptor(
+                mvkDevice,
+                buildInfo,
+                entry.ranges.data(),
+                nullptr
+            );
+
+            id<MTLDevice> mtlDev = cmdEncoder->getPhysicalDevice()->getMTLDevice();
+            MTLAccelerationStructureSizes sizes = [mtlDev accelerationStructureSizesWithDescriptor:descriptor];
+
+            VkAccelerationStructureBuildSizesInfoKHR buildSizes = {};
+            buildSizes.accelerationStructureSize = sizes.accelerationStructureSize;
+            buildSizes.buildScratchSize = sizes.buildScratchBufferSize;
+            buildSizes.updateScratchSize = sizes.refitScratchBufferSize;
+	    mvkDstAccStruct->setBuildSizes(buildSizes);
+	}
+
         id<MTLAccelerationStructure> dstAccStruct = mvkDstAccStruct->getMTLAccelerationStructure();
-        
-        id<MTLHeap> srcAccStructHeap = mvkSrcAccStruct->getMTLHeap();
         id<MTLHeap> dstAccStructHeap = mvkDstAccStruct->getMTLHeap();
         
         // Should we throw an error here?
@@ -70,23 +100,17 @@ void MVKCmdBuildAccelerationStructure::encode(MVKCommandEncoder* cmdEncoder) {
         if(buildInfo.mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR && !mvkDstAccStruct->getAllowUpdate())
             continue;
         
-        MVKDevice* mvkDevice = cmdEncoder->getDevice();
         MVKBuffer* mvkBuffer = mvkDevice->getBufferAtAddress(buildInfo.scratchData.deviceAddress);
 
         // TODO: throw error if mvkBuffer is null?
         
         id<MTLBuffer> scratchBuffer = mvkBuffer->getMTLBuffer();
         NSInteger scratchBufferOffset = mvkBuffer->getMTLBufferOffset();
-        
+        assert(scratchBuffer);
+        assert(mvkBuffer->getMTLBufferGPUAddress());
+
         if (buildInfo.mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR)
         {
-            MTLAccelerationStructureDescriptor* descriptor = mvkDstAccStruct->populateMTLDescriptor(
-                mvkDevice,
-                buildInfo,
-                entry.ranges.data(),
-                nullptr
-            );
-
             [accStructEncoder buildAccelerationStructure:dstAccStruct
                                                 descriptor:descriptor
                                                 scratchBuffer:scratchBuffer
@@ -94,7 +118,7 @@ void MVKCmdBuildAccelerationStructure::encode(MVKCommandEncoder* cmdEncoder) {
         }
         else if (buildInfo.mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR)
         {
-            MTLAccelerationStructureDescriptor* descriptor = [MTLAccelerationStructureDescriptor new];
+            descriptor = [MTLAccelerationStructureDescriptor new];
             
             if (mvkIsAnyFlagEnabled(buildInfo.flags, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR))
                 descriptor.usage += MTLAccelerationStructureUsagePreferFastBuild;

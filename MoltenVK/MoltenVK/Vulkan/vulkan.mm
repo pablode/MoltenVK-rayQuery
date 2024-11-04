@@ -575,7 +575,14 @@ MVK_PUBLIC_VULKAN_SYMBOL VkResult vkBindBufferMemory(
 	MVKTraceVulkanCallStart();
 	MVKBuffer* mvkBuff = (MVKBuffer*)buffer;
 	MVKDeviceMemory* mvkMem = (MVKDeviceMemory*)mem;
+auto *oldDevMem = mvkBuff->getDeviceMemory();
 	VkResult rslt = mvkBuff->bindDeviceMemory(mvkMem, memOffset);
+if (!oldDevMem)
+{
+	MVKDevice* mvkDev = MVKDevice::getMVKDevice(device);
+	mvkDev->registerGpuAddressableBuffer(mvkBuff);
+}
+// TODO: else, we should remove the old address from the map
 	MVKTraceVulkanCallEnd();
 	return rslt;
 }
@@ -2922,7 +2929,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkGetAccelerationStructureBuildSizesKHR(
     VkAccelerationStructureBuildSizesInfoKHR*             pSizeInfo) {
     
     MVKTraceVulkanCallStart();
-    MVKDevice* mvkDev = (MVKDevice*)device;
+    MVKDevice* mvkDev = MVKDevice::getMVKDevice(device);
     *pSizeInfo = mvkDev->getBuildSizes(buildType, pBuildInfo, pMaxPrimitiveCounts);
     MVKTraceVulkanCallEnd();
 }
@@ -2933,7 +2940,7 @@ MVK_PUBLIC_VULKAN_SYMBOL void vkGetDeviceAccelerationStructureCompatibilityKHR(
     VkAccelerationStructureCompatibilityKHR*        pCompatibility) {
     
     MVKTraceVulkanCallStart();
-    MVKDevice* mvkDev = (MVKDevice*)device;
+    MVKDevice* mvkDev = MVKDevice::getMVKDevice(device);
     *pCompatibility = mvkDev->getAccelerationStructureCompatibility(pVersionInfo);
     MVKTraceVulkanCallEnd();
 }

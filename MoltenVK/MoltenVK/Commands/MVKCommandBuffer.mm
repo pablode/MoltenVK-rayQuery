@@ -877,7 +877,8 @@ id<MTLAccelerationStructureCommandEncoder> MVKCommandEncoder::getMTLAcceleration
     }
     if (_mtlAccelerationStructureEncoderUse != cmdUse) {
         _mtlAccelerationStructureEncoderUse = cmdUse;
-        _cmdBuffer->setMetalObjectLabel(_mtlAccelerationStructureEncoder, mvkMTLAccelerationStructureCommandEncoderLabel(cmdUse));
+        // TODO: why does this not work??
+        //_cmdBuffer->setMetalObjectLabel(_mtlAccelerationStructureEncoder, mvkMTLAccelerationStructureCommandEncoderLabel(cmdUse));
     }
     return _mtlAccelerationStructureEncoder;
 }

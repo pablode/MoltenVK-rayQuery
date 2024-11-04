@@ -61,26 +61,33 @@ MVKAddressMap::~MVKAddressMap()
     }
 }
 
+__attribute__((optnone))
 MVKAddressMap::Block* MVKAddressMap::loadBlock(uint64_t addr)
 {
     uint64_t blockIdx = getBlockIndex(addr);
     uint64_t nodeIdx = getNodeIndex(addr);
 
+    assert(nodeIdx < NodeCount);
     Node* node = loadAtomic(_nodes[nodeIdx]);
 
+    assert(blockIdx < BlockCount);
     return &node->blocks[blockIdx];
 }
 
+__attribute__((optnone))
 MVKAddressMap::Block* MVKAddressMap::getBlock(uint64_t addr) const
 {
+    assert(addr);
     uint64_t nodeIdx = getNodeIndex(addr);
 
+    assert(nodeIdx < NodeCount);
     Node* node = _nodes[nodeIdx].load(std::memory_order_acquire);
     if (!node)
         return nullptr;
 
     uint64_t blockIdx = getBlockIndex(addr);
 
+    assert(blockIdx < BlockCount);
     return &node->blocks[blockIdx];
 }
 
@@ -159,6 +166,12 @@ void MVKAddressMap::removeEntry(const Entry& entry)
 bool MVKAddressMap::getEntry(uint64_t addr, Entry& outEntry) const
 {
     Block* block = getBlock(addr);
+
+if (!block)
+{
+fprintf(stderr,"ERROR BLOCK\n");
+return false;
+}
 
     // First check left. This means the address is within the range and the base
     // address is to the left.

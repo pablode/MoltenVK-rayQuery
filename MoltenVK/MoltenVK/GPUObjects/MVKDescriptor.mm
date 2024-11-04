@@ -19,6 +19,7 @@
 #include "MVKDescriptor.h"
 #include "MVKDescriptorSet.h"
 #include "MVKBuffer.h"
+#include "MVKAccelerationStructure.h"
 #include <sstream>
 #include <iomanip>
 
@@ -41,6 +42,7 @@ MVKShaderStageResourceBinding MVKShaderStageResourceBinding::operator+ (const MV
 	rslt.bufferIndex = this->bufferIndex + rhs.bufferIndex;
 	rslt.textureIndex = this->textureIndex + rhs.textureIndex;
 	rslt.samplerIndex = this->samplerIndex + rhs.samplerIndex;
+	rslt.accelerationStructureIndex = this->accelerationStructureIndex + rhs.accelerationStructureIndex;
 	rslt.dynamicOffsetBufferIndex = this->dynamicOffsetBufferIndex + rhs.dynamicOffsetBufferIndex;
 	return rslt;
 }
@@ -49,6 +51,7 @@ MVKShaderStageResourceBinding& MVKShaderStageResourceBinding::operator+= (const 
 	this->bufferIndex += rhs.bufferIndex;
 	this->textureIndex += rhs.textureIndex;
 	this->samplerIndex += rhs.samplerIndex;
+	this->accelerationStructureIndex += rhs.accelerationStructureIndex;
 	this->dynamicOffsetBufferIndex += rhs.dynamicOffsetBufferIndex;
 	return *this;
 }
@@ -57,6 +60,7 @@ void MVKShaderStageResourceBinding::clearArgumentBufferResources() {
 	bufferIndex = 0;
 	textureIndex = 0;
 	samplerIndex = 0;
+	accelerationStructureIndex = 0;
 }
 
 
@@ -72,6 +76,10 @@ uint32_t MVKShaderResourceBinding::getMaxTextureIndex() {
 
 uint32_t MVKShaderResourceBinding::getMaxSamplerIndex() {
 	return std::max({stages[kMVKShaderStageVertex].samplerIndex, stages[kMVKShaderStageTessCtl].samplerIndex, stages[kMVKShaderStageTessEval].samplerIndex, stages[kMVKShaderStageFragment].samplerIndex, stages[kMVKShaderStageCompute].samplerIndex});
+}
+
+uint32_t MVKShaderResourceBinding::getMaxAccelerationStructureIndex() {
+	return std::max({stages[kMVKShaderStageVertex].accelerationStructureIndex, stages[kMVKShaderStageTessCtl].accelerationStructureIndex, stages[kMVKShaderStageTessEval].accelerationStructureIndex, stages[kMVKShaderStageFragment].accelerationStructureIndex, stages[kMVKShaderStageCompute].accelerationStructureIndex});
 }
 
 MVKShaderResourceBinding MVKShaderResourceBinding::operator+ (const MVKShaderResourceBinding& rhs) {
@@ -124,6 +132,7 @@ void mvkPopulateShaderConversionConfig(mvk::SPIRVToMSLConversionConfiguration& s
 		rbb.msl_buffer = ssRB.bufferIndex;											\
 		rbb.msl_texture = ssRB.textureIndex;										\
 		rbb.msl_sampler = ssRB.samplerIndex;										\
+		rbb.msl_acceleration_structure = ssRB.accelerationStructureIndex;										\
 		if (immutableSampler) { immutableSampler->getConstexprSampler(rb); }		\
 		shaderConfig.resourceBindings.push_back(rb);								\
 	} while(false)
@@ -176,6 +185,10 @@ void mvkPopulateShaderConversionConfig(mvk::SPIRVToMSLConversionConfiguration& s
 
 		case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
 			addResourceBinding(SampledImage);
+			break;
+
+		case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+			addResourceBinding(AccelerationStructure);
 			break;
 
 		default:
@@ -239,6 +252,7 @@ void MVKDescriptorSetLayoutBinding::push(MVKCommandEncoder* cmdEncoder,
     MVKMTLBufferBinding bb;
     MVKMTLTextureBinding tb;
     MVKMTLSamplerStateBinding sb;
+    MVKMTLAccelerationStructureBinding ab;
 
     if (dstArrayElement >= _info.descriptorCount) {
         dstArrayElement -= _info.descriptorCount;
@@ -399,6 +413,35 @@ void MVKDescriptorSetLayoutBinding::push(MVKCommandEncoder* cmdEncoder,
                 break;
             }
 
+// TODO: I don't think we need this and many other stuff... because we can always bind AS's using argument buffers
+            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
+                const auto& accelerationStructure = *(VkWriteDescriptorSetAccelerationStructureKHR*)pData;
+		MVKAccelerationStructure* mvkAs = (MVKAccelerationStructure*) &accelerationStructure.pAccelerationStructures[0];
+                ab.mtlAccelerationStructure = mvkAs->getMTLAccelerationStructure();
+                for (uint32_t i = kMVKShaderStageVertex; i < kMVKShaderStageCount; i++) {
+                    if (_applyToStage[i]) {
+                        ab.index = mtlIdxs.stages[i].accelerationStructureIndex + rezIdx;
+                        //BIND_GRAPHICS_OR_COMPUTE(cmdEncoder, bindAccelerationStructure, pipelineBindPoint, i, ab);
+/*
+
+	do { \
+		if ((stage) == kMVKShaderStageCompute) { \
+			if ((cmdEncoder) && (pipelineBindPoint) == VK_PIPELINE_BIND_POINT_COMPUTE) \
+				(cmdEncoder)->_computeResourcesState.bind(__VA_ARGS__); \
+		} else { \
+			if ((cmdEncoder) && (pipelineBindPoint) == VK_PIPELINE_BIND_POINT_GRAPHICS) \
+				(cmdEncoder)->_graphicsResourcesState.bind(static_cast<MVKShaderStage>(stage), __VA_ARGS__); \
+		} \
+	} while (0)
+
+
+*/
+                    }
+                }
+
+                break;
+            }
+
             default:
                 break;
         }
@@ -464,6 +507,10 @@ void MVKDescriptorSetLayoutBinding::addMTLArgumentDescriptors(NSMutableArray<MTL
 			addMTLArgumentDescriptor(args, variableDescriptorCount, getMetalResourceIndexOffsets().samplerIndex, MTLDataTypeSampler, MTLArgumentAccessReadOnly);
 			break;
 		}
+
+		case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+			addMTLArgumentDescriptor(args, variableDescriptorCount, getMetalResourceIndexOffsets().accelerationStructureIndex, MTLDataTypeInstanceAccelerationStructure, MTLArgumentAccessReadOnly);
+			break;
 
 		default:
 			break;
@@ -742,6 +789,10 @@ if (isUsingMtlArgBuff) {									\
 			dslCnts.dynamicOffsetBufferIndex += descCnt;
 
 			break;
+
+        case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+             setResourceIndexOffset(accelerationStructureIndex, 1);
+             break;
 
         default:
             break;
@@ -1354,6 +1405,78 @@ void MVKTexelBufferDescriptor::reset() {
 	if (_mvkBufferView) { _mvkBufferView->release(); }
 	_mvkBufferView = nullptr;
 	MVKDescriptor::reset();
+}
+
+
+#pragma mark -
+#pragma mark MVKAccelerationStructureDescriptor
+
+// A null cmdEncoder can be passed to perform a validation pass
+void MVKAccelerationStructureDescriptor::bind(MVKCommandEncoder* cmdEncoder,
+							   VkPipelineBindPoint pipelineBindPoint,
+							   MVKDescriptorSetLayoutBinding* mvkDSLBind,
+							   uint32_t elementIndex,
+							   bool stages[],
+							   MVKShaderResourceBinding& mtlIndexes,
+							   MVKArrayRef<uint32_t> dynamicOffsets,
+							   uint32_t& dynamicOffsetIndex) {
+	MVKMTLAccelerationStructureBinding ab;
+	if (_mvkAccelerationStructure) {
+		ab.mtlAccelerationStructure = _mvkAccelerationStructure->getMTLAccelerationStructure();
+	}
+	for (uint32_t i = kMVKShaderStageVertex; i < kMVKShaderStageCount; i++) {
+		if (stages[i]) {
+			ab.index = mtlIndexes.stages[i].accelerationStructureIndex + elementIndex;
+			//BIND_GRAPHICS_OR_COMPUTE(cmdEncoder, bindAccelerationStructure, pipelineBindPoint, i, ab);
+		}
+	}
+}
+
+void MVKAccelerationStructureDescriptor::write(MVKDescriptorSetLayoutBinding* mvkDSLBind,
+								MVKDescriptorSet* mvkDescSet,
+								uint32_t dstIdx,
+								uint32_t srcIdx,
+								size_t srcStride,
+								const void* pData) {
+	auto* oldAccelerationStructure = _mvkAccelerationStructure;
+
+	const auto* pAccelerationStructure = &get<VkAccelerationStructureKHR>(pData, srcStride, srcIdx);
+	_mvkAccelerationStructure = (MVKAccelerationStructure*)*pAccelerationStructure;
+
+	if (_mvkAccelerationStructure) { _mvkAccelerationStructure->retain(); }
+	if (oldAccelerationStructure) { oldAccelerationStructure->release(); }
+
+	if (mvkDescSet->hasMetalArgumentBuffer()) {
+		auto& mvkArgBuff = mvkDescSet->getMetalArgumentBuffer();
+		id<MTLAccelerationStructure> mtlAs = _mvkAccelerationStructure->getMTLAccelerationStructure();
+		uint32_t argIdx = mvkDSLBind->getMetalResourceIndexOffsets().accelerationStructureIndex + dstIdx;
+		mvkArgBuff.setAccelerationStructure(mtlAs, argIdx);
+	}
+}
+
+void MVKAccelerationStructureDescriptor::read(MVKDescriptorSetLayoutBinding* mvkDSLBind,
+							   MVKDescriptorSet* mvkDescSet,
+							   uint32_t dstIndex,
+							   VkDescriptorImageInfo* pImageInfo,
+							   VkDescriptorBufferInfo* pBufferInfo,
+							   VkBufferView* pTexelBufferView,
+							   VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+							   VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) {
+	pAccelerationStructure[dstIndex].accelerationStructureCount = 1;
+	pAccelerationStructure[dstIndex].pAccelerationStructures = (const VkAccelerationStructureKHR*)_mvkAccelerationStructure;
+}
+
+void MVKAccelerationStructureDescriptor::reset() {
+	if (_mvkAccelerationStructure) { _mvkAccelerationStructure->release(); }
+	_mvkAccelerationStructure = nullptr;
+	MVKDescriptor::reset();
+}
+
+void MVKAccelerationStructureDescriptor::encodeResourceUsage(MVKResourcesCommandEncoderState* rezEncState,
+											  MVKDescriptorSetLayoutBinding* mvkDSLBind,
+											  MVKShaderStage stage) {
+	id<MTLAccelerationStructure> mtlAs = _mvkAccelerationStructure ? _mvkAccelerationStructure->getMTLAccelerationStructure() : nil;
+	rezEncState->encodeResourceUsage(stage, mtlAs, getMTLResourceUsage(), mvkDSLBind->getMTLRenderStages());
 }
 
 

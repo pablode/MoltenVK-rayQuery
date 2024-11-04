@@ -34,6 +34,8 @@
 #include "MVKCodec.h"
 #include "MVKStrings.h"
 #include "MVKAccelerationStructure.h"
+#include "MVKAddressMap.h"
+
 #include <MoltenVKShaderConverter/SPIRVToMSLConverter.h>
 
 #import "CAMetalLayer+MoltenVK.h"
@@ -3834,6 +3836,8 @@ void MVKDevice::getCalibratedTimestamps(uint32_t timestampCount,
 
 MVKBuffer* MVKDevice::getBufferAtAddress(uint64_t address)
 {
+if (!address) return nullptr;
+
     void* value = nullptr;
     _gpuBufferAddressMap->getValue(address, value);
     return (MVKBuffer*)value;
@@ -4135,6 +4139,7 @@ void MVKDevice::destroyPipelineLayout(MVKPipelineLayout* mvkPLL,
 
 MVKAccelerationStructure* MVKDevice::createAccelerationStructure(const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
                                                                  const VkAllocationCallbacks*                pAllocator) {
+printf("createAccelerationStructure\n");
     return addAccelerationStructure(new MVKAccelerationStructure(this));
 }
 
@@ -4364,24 +4369,37 @@ void MVKDevice::destroyPrivateDataSlot(VkPrivateDataSlotEXT privateDataSlot,
 
 #pragma mark Operations
 
-// If the underlying MTLBuffer is referenced in a shader only via its gpuAddress,
-// the GPU might not be aware that the MTLBuffer needs to be made resident.
-// Track the buffer as needing to be made resident if a shader is bound that uses
-// PhysicalStorageBufferAddresses to access the contents of the underlying MTLBuffer.
 MVKBuffer* MVKDevice::addBuffer(MVKBuffer* mvkBuff) {
 	if ( !mvkBuff ) { return mvkBuff; }
 
 	lock_guard<mutex> lock(_rezLock);
 	_resources.push_back(mvkBuff);
-	if (mvkIsAnyFlagEnabled(mvkBuff->getUsage(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)) {
-		_gpuAddressableBuffers.push_back(mvkBuff);
-        _gpuBufferAddressMap->addEntry({
-            mvkBuff->getMTLBufferGPUAddress(),
-            mvkBuff->getByteCount(),
-            mvkBuff
-        });
-	}
+
+        registerGpuAddressableBuffer(mvkBuff);
 	return mvkBuff;
+}
+
+// If the underlying MTLBuffer is referenced in a shader only via its gpuAddress,
+// the GPU might not be aware that the MTLBuffer needs to be made resident.
+// Track the buffer as needing to be made resident if a shader is bound that uses
+// PhysicalStorageBufferAddresses to access the contents of the underlying MTLBuffer.
+void MVKDevice::registerGpuAddressableBuffer(MVKBuffer* mvkBuff)
+{
+    if (!mvkIsAnyFlagEnabled(mvkBuff->getUsage(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT))
+    {
+        return;
+    }
+
+    auto gpuAddr = mvkBuff->getMTLBufferGPUAddress();
+    if (!gpuAddr) return;
+
+    _gpuAddressableBuffers.push_back(mvkBuff); // TODO: make sure this is only done once
+
+    _gpuBufferAddressMap->addEntry({
+        gpuAddr,
+        mvkBuff->getByteCount(),
+        mvkBuff
+    });
 }
 
 MVKBuffer* MVKDevice::removeBuffer(MVKBuffer* mvkBuff) {
@@ -4451,6 +4469,7 @@ void MVKDevice::removeTimelineSemaphore(MVKTimelineSemaphore* sem4, uint64_t val
 }
 
 MVKAccelerationStructure* MVKDevice::addAccelerationStructure(MVKAccelerationStructure* accStruct) {
+fprintf(stderr,"ACCEL STRUCT added to map\n");
     std::pair<uint64_t, MVKAccelerationStructure*> accStructMemoryPair = std::make_pair(_nextValidAccStructureAddress, accStruct);
     _gpuAccStructAddressMap.insert(accStructMemoryPair);
     accStruct->setDeviceAddress(_nextValidAccStructureAddress);
@@ -4909,6 +4928,9 @@ void MVKDevice::getMetalObjects(VkExportMetalObjectsInfoEXT* pMetalObjectsInfo) 
 
 MVKDevice::MVKDevice(MVKPhysicalDevice* physicalDevice, const VkDeviceCreateInfo* pCreateInfo) : _enabledExtensions(this) {
 
+	_gpuBufferAddressMap = new MVKAddressMap();
+assert(_gpuBufferAddressMap);
+
 	// If the physical device is lost, bail.
 	// Must have initialized everything accessed in destructor to null.
 	if (physicalDevice->getConfigurationResult() != VK_SUCCESS) {
@@ -4941,8 +4963,6 @@ MVKDevice::MVKDevice(MVKPhysicalDevice* physicalDevice, const VkDeviceCreateInfo
 																? "Metal argument buffers" : "Metal3 argument buffers") : "discrete resource indexes");
 
 	_commandResourceFactory = new MVKCommandResourceFactory(this);
-
-	_gpuBufferAddressMap = new MVKAddressMap();
 
 	startAutoGPUCapture(MVK_CONFIG_AUTO_GPU_CAPTURE_SCOPE_DEVICE, _physicalDevice->_mtlDevice);
 

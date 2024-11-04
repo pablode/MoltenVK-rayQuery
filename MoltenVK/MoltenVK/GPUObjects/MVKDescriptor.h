@@ -39,6 +39,7 @@ typedef struct MVKShaderStageResourceBinding {
 	uint32_t bufferIndex = 0;
 	uint32_t textureIndex = 0;
 	uint32_t samplerIndex = 0;
+	uint32_t accelerationStructureIndex = 0;
 	uint32_t dynamicOffsetBufferIndex = 0;
 
 	MVKShaderStageResourceBinding operator+ (const MVKShaderStageResourceBinding& rhs);
@@ -57,6 +58,7 @@ typedef struct MVKShaderResourceBinding {
 	uint32_t getMaxBufferIndex();
 	uint32_t getMaxTextureIndex();
 	uint32_t getMaxSamplerIndex();
+	uint32_t getMaxAccelerationStructureIndex();
 
 	MVKShaderResourceBinding operator+ (const MVKShaderResourceBinding& rhs);
 	MVKShaderResourceBinding& operator+= (const MVKShaderResourceBinding& rhs);
@@ -701,6 +703,53 @@ public:
 class MVKStorageTexelBufferDescriptor : public MVKTexelBufferDescriptor {
 public:
 	VkDescriptorType getDescriptorType() override { return VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER; }
+};
+
+
+#pragma mark -
+#pragma mark MVKAccelerationStructureDescriptor
+
+/** Represents a Vulkan descriptor tracking an acceleration structure. */
+class MVKAccelerationStructureDescriptor : public MVKDescriptor {
+
+public:
+	VkDescriptorType getDescriptorType() override { return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR; }
+
+	void bind(MVKCommandEncoder* cmdEncoder,
+			  VkPipelineBindPoint pipelineBindPoint,
+			  MVKDescriptorSetLayoutBinding* mvkDSLBind,
+			  uint32_t elementIndex,
+			  bool stages[],
+			  MVKShaderResourceBinding& mtlIndexes,
+			  MVKArrayRef<uint32_t> dynamicOffsets,
+			  uint32_t& dynamicOffsetIndex) override;
+
+	void write(MVKDescriptorSetLayoutBinding* mvkDSLBind,
+			   MVKDescriptorSet* mvkDescSet,
+			   uint32_t dstIdx,
+			   uint32_t srcIdx,
+			   size_t srcStride,
+			   const void* pData) override;
+
+	void read(MVKDescriptorSetLayoutBinding* mvkDSLBind,
+			  MVKDescriptorSet* mvkDescSet,
+			  uint32_t dstIndex,
+			  VkDescriptorImageInfo* pImageInfo,
+			  VkDescriptorBufferInfo* pBufferInfo,
+			  VkBufferView* pTexelBufferView,
+			  VkWriteDescriptorSetInlineUniformBlockEXT* inlineUniformBlock,
+			  VkWriteDescriptorSetAccelerationStructureKHR* pAccelerationStructure) override;
+
+	void encodeResourceUsage(MVKResourcesCommandEncoderState* rezEncState,
+							 MVKDescriptorSetLayoutBinding* mvkDSLBind,
+							 MVKShaderStage stage) override;
+
+	void reset() override;
+
+	~MVKAccelerationStructureDescriptor() { reset(); }
+
+protected:
+	MVKAccelerationStructure* _mvkAccelerationStructure = nullptr;
 };
 
 

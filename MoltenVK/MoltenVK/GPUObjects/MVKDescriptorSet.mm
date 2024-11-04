@@ -891,6 +891,9 @@ VkResult MVKDescriptorPool::allocateDescriptor(VkDescriptorType descriptorType,
 		case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
 			return _storageTexelBufferDescriptors.allocateDescriptor(descriptorType, pMVKDesc, dynamicAllocation, this);
 
+		case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+			return _accelerationStructureDescriptors.allocateDescriptor(descriptorType, pMVKDesc, dynamicAllocation, this);
+
 		default:
 			return reportError(VK_ERROR_INITIALIZATION_FAILED, "Unrecognized VkDescriptorType %d.", descriptorType);
 	}
@@ -934,6 +937,9 @@ void MVKDescriptorPool::freeDescriptor(MVKDescriptor* mvkDesc) {
 
 		case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
 			return _storageTexelBufferDescriptors.freeDescriptor(mvkDesc, this);
+
+		case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+			return _accelerationStructureDescriptors.freeDescriptor(mvkDesc, this);
 
 		default:
 			reportError(VK_ERROR_INITIALIZATION_FAILED, "Unrecognized VkDescriptorType %d.", descriptorType);
@@ -1011,8 +1017,9 @@ MVKDescriptorPool::MVKDescriptorPool(MVKDevice* device, const VkDescriptorPoolCr
 	_samplerDescriptors(getPoolSize(pCreateInfo, VK_DESCRIPTOR_TYPE_SAMPLER)),
 	_combinedImageSamplerDescriptors(getPoolSize(pCreateInfo, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)),
 	_uniformTexelBufferDescriptors(getPoolSize(pCreateInfo, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER)),
-    _storageTexelBufferDescriptors(getPoolSize(pCreateInfo, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)),
-    _flags(pCreateInfo->flags) {
+	_storageTexelBufferDescriptors(getPoolSize(pCreateInfo, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)),
+	_accelerationStructureDescriptors(getPoolSize(pCreateInfo, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR)),
+	_flags(pCreateInfo->flags) {
 
 		initMetalArgumentBuffer(pCreateInfo);
 		MVKLogDebugIf(getMVKConfig().debugMode, "Created %s\n", getLogDescription().c_str());

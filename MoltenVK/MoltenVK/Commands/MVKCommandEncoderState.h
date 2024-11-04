@@ -475,6 +475,7 @@ protected:
 		MVKSmallVector<MVKMTLBufferBinding, N> bufferBindings;
 		MVKSmallVector<MVKMTLTextureBinding, N> textureBindings;
 		MVKSmallVector<MVKMTLSamplerStateBinding, N> samplerStateBindings;
+		MVKSmallVector<MVKMTLAccelerationStructureBinding, N> accelerationStructureBindings;
 		MVKSmallVector<uint32_t, N> swizzleConstants;
 		MVKSmallVector<uint32_t, N> bufferSizes;
 
@@ -486,6 +487,7 @@ protected:
 		bool areBufferBindingsDirty = false;
 		bool areTextureBindingsDirty = false;
 		bool areSamplerStateBindingsDirty = false;
+		bool areAccelerationStructureBindingsDirty = false;
 
 		bool needsSwizzle = false;
 	};

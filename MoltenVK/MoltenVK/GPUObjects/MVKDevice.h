@@ -870,6 +870,8 @@ public:
         return (MVKDevice*)getDispatchableObject(vkDevice);
     }
 
+void registerGpuAddressableBuffer(MVKBuffer* mvkBuff);
+
 protected:
 	friend class MVKDeviceTrackingMixin;
 
